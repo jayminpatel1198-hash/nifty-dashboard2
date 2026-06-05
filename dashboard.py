@@ -70,7 +70,24 @@ def home():
     bull_score = max(0, min(100, round(50 + score, 1)))
     put_score = round(100 - bull_score, 1)
 
-    if bull_score >= 70 and green_pct >= 60:
+    if green_pct >= 65 and bull_score >= 70:
+    mood = "TRENDING BULLISH"
+    risk = "LOW"
+    strength = "STRONG"
+elif red_pct >= 65 and bull_score <= 30:
+    mood = "TRENDING BEARISH"
+    risk = "LOW"
+    strength = "STRONG"
+elif 45 <= green_pct <= 55:
+    mood = "CHOPPY / SIDEWAYS"
+    risk = "HIGH"
+    strength = "WEAK"
+else:
+    mood = "MIXED"
+    risk = "MEDIUM"
+    strength = "MEDIUM"
+
+if bull_score >= 70 and green_pct >= 60:
         signal = "STRONG CALL BIAS"
         color = "#d9fbe6"
     elif bull_score <= 30 and red_pct >= 60:
@@ -120,7 +137,9 @@ td,th {{padding:8px;border-bottom:1px solid #ddd}}
 <div class="card">Red: <span class="big red">{red} ({red_pct}%)</span></div>
 <div class="card">Bull Score: <span class="big">{bull_score}/100</span></div>
 <div class="card">Put Score: <span class="big">{put_score}/100</span></div>
-<div class="card">Weight Score: <span class="big">{round(score,2)}</span></div>
+<div class="card">Weight Score:<div class="card">Market Mood: <span class="big">{mood}</span></div>
+<div class="card">Risk: <span class="big">{risk}</span></div>
+<div class="card">Strength: <span class="big">{strength}</span></div> <span class="big">{round(score,2)}</span></div>
 
 <div class="card">
 <h3>Top 5 Gainers</h3>
