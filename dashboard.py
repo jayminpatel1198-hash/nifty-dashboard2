@@ -13,6 +13,7 @@ instruments = {
 }
 
 nifty_weights = {"HDFCBANK":10.73,"RELIANCE":8.78,"ICICIBANK":8.21,"BHARTIARTL":5.26,"LT":4.28,"SBIN":4.03,"INFY":3.76,"AXISBANK":3.31,"ITC":2.76,"KOTAKBANK":2.56,"M&M":2.51,"TCS":2.30,"BAJFINANCE":2.28,"HINDUNILVR":1.81,"SUNPHARMA":1.74,"NTPC":1.72,"TITAN":1.64,"TATASTEEL":1.59,"MARUTI":1.59,"BEL":1.40,"HINDALCO":1.37,"POWERGRID":1.31,"ULTRACEMCO":1.25,"HCLTECH":1.15,"ADANIPORTS":1.11,"JSWSTEEL":1.08,"ONGC":1.06,"ASIANPAINT":1.00,"COALINDIA":0.99,"GRASIM":0.97,"NESTLEIND":0.95,"BAJAJFINSV":0.92,"TECHM":0.85,"TRENT":0.84,"DRREDDY":0.73,"CIPLA":0.67,"ADANIENT":0.63,"WIPRO":0.52}
+
 bank_weights = {"HDFCBANK":28,"ICICIBANK":24,"SBIN":11,"KOTAKBANK":10,"AXISBANK":9,"INDUSINDBK":5,"BANKBARODA":4,"PNB":3,"CANBK":2.5,"FEDERALBNK":1.5,"IDFCFIRSTB":1,"AUBANK":1}
 
 configs = {
@@ -27,38 +28,45 @@ def auth_headers():
 @app.route("/candles")
 def candles():
     idx = request.args.get("index","NIFTY").upper()
-    tf = request.args.get("tf","1D")
+    tf = request.args.get("tf","5M")
     if idx not in configs:
         idx = "NIFTY"
+
     key = quote(configs[idx]["index_key"], safe="")
     today = datetime.now().date()
+
     try:
-        if tf == "1D":
+        if tf == "5M":
             url = f"https://api.upstox.com/v3/historical-candle/intraday/{key}/minutes/5"
-        elif tf == "5D":
-            url = f"https://api.upstox.com/v3/historical-candle/{key}/minutes/30/{today}/{today-timedelta(days=8)}"
-        elif tf == "1M":
-            url = f"https://api.upstox.com/v3/historical-candle/{key}/hours/1/{today}/{today-timedelta(days=35)}"
-        elif tf == "3M":
-            url = f"https://api.upstox.com/v3/historical-candle/{key}/days/1/{today}/{today-timedelta(days=100)}"
-        elif tf == "6M":
-            url = f"https://api.upstox.com/v3/historical-candle/{key}/days/1/{today}/{today-timedelta(days=200)}"
+        elif tf == "1H":
+            url = f"https://api.upstox.com/v3/historical-candle/{key}/hours/1/{today}/{today-timedelta(days=30)}"
+        elif tf == "1D":
+            url = f"https://api.upstox.com/v3/historical-candle/{key}/days/1/{today}/{today-timedelta(days=365)}"
         else:
-            url = f"https://api.upstox.com/v3/historical-candle/{key}/weeks/1/{today}/{today-timedelta(days=370)}"
+            url = f"https://api.upstox.com/v3/historical-candle/intraday/{key}/minutes/5"
+
         js = requests.get(url, headers=auth_headers(), timeout=20).json()
         raw = js.get("data",{}).get("candles",[])
+
         out = []
         for c in raw:
-            out.append({"time":int(datetime.fromisoformat(c[0].replace("Z","+00:00")).timestamp()),"open":float(c[1]),"high":float(c[2]),"low":float(c[3]),"close":float(c[4])})
-        return jsonify({"candles":list(reversed(out))})
+            out.append({
+                "time": int(datetime.fromisoformat(c[0].replace("Z","+00:00")).timestamp()),
+                "open": float(c[1]),
+                "high": float(c[2]),
+                "low": float(c[3]),
+                "close": float(c[4])
+            })
+
+        return jsonify({"candles": list(reversed(out))})
     except Exception as e:
-        return jsonify({"error":str(e)})
+        return jsonify({"error": str(e)})
 
 HTML = """
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ title }} V18</title>
+<title>{{ title }} Dashboard</title>
 <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
 <style>
 body{font-family:Arial;background:#f4f6f8;padding:12px;margin:0}
@@ -70,7 +78,7 @@ select{font-size:18px;padding:10px;border-radius:10px;width:100%}.small{text-ali
 button{padding:9px;margin:3px;border:0;border-radius:8px;background:#e8eaed;font-weight:bold}
 button.active{background:#111;color:white}
 input{padding:10px;border-radius:8px;border:1px solid #ccc;width:38%;margin:3px}
-.chartbox{height:520px}
+.chartbox{height:540px}
 @media (orientation:landscape){.chartbox{height:430px}}
 .meterbox{text-align:center}.gauge{width:280px;height:170px;margin:15px auto;position:relative;overflow:hidden}
 .gauge:before{content:"";position:absolute;left:20px;top:20px;width:240px;height:240px;border-radius:50%;background:conic-gradient(from 270deg,#d93025 0deg 80deg,#fbbc04 80deg 100deg,#0a9f45 100deg 180deg,transparent 180deg 360deg)}
@@ -79,13 +87,12 @@ input{padding:10px;border-radius:8px;border:1px solid #ccc;width:38%;margin:3px}
 .center{position:absolute;left:126px;top:118px;width:29px;height:29px;background:#111;border-radius:50%;z-index:4}
 .score{position:absolute;left:0;right:0;top:98px;text-align:center;font-size:31px;font-weight:bold;z-index:5}
 .tick{position:absolute;font-size:13px;font-weight:bold;z-index:6}
-.t10{left:18px;top:126px}.t20{left:30px;top:88px}.t30{left:58px;top:54px}.t40{left:96px;top:31px}.t50{left:132px;top:22px}
-.t60{left:172px;top:31px}.t70{left:207px;top:54px}.t80{left:235px;top:88px}.t90{left:247px;top:126px}.t100{left:230px;top:148px}
+.t10{left:18px;top:126px}.t20{left:30px;top:88px}.t30{left:58px;top:54px}.t40{left:96px;top:31px}.t50{left:132px;top:22px}.t60{left:172px;top:31px}.t70{left:207px;top:54px}.t80{left:235px;top:88px}.t90{left:247px;top:126px}.t100{left:230px;top:148px}
 .labels{display:flex;justify-content:space-between;font-size:13px;margin:0 18px}
 </style>
 </head>
 <body>
-<h2>{{ title }} V18 DASHBOARD</h2>
+<h2>{{ title }} DASHBOARD</h2>
 
 <div class="card">
 <select onchange="changeIndex(this.value)">
@@ -100,12 +107,9 @@ input{padding:10px;border-radius:8px;border:1px solid #ccc;width:38%;margin:3px}
 
 <div class="card">
 <h3>{{ title }} Candlestick Chart</h3>
-<button onclick="loadChart('1D')" class="active">1D</button>
-<button onclick="loadChart('5D')">5D</button>
-<button onclick="loadChart('1M')">1M</button>
-<button onclick="loadChart('3M')">3M</button>
-<button onclick="loadChart('6M')">6M</button>
-<button onclick="loadChart('1Y')">1Y</button>
+<button onclick="loadChart('5M')" class="active">5 Min</button>
+<button onclick="loadChart('1H')">1 Hour</button>
+<button onclick="loadChart('1D')">1 Day</button>
 <p id="status" class="small">Loading...</p>
 <div id="chart" class="chartbox"></div>
 </div>
@@ -120,21 +124,15 @@ Saved Resistance: <span class="big red" id="savedResistance">-</span><br><br>
 </div>
 
 {% if analysis %}
-<div class="card meterbox">
-<h3>Weightage Impact Meter</h3>
-<div class="gauge">
+<div class="card meterbox"><h3>Weightage Impact Meter</h3><div class="gauge">
 <div class="tick t10">10</div><div class="tick t20">20</div><div class="tick t30">30</div><div class="tick t40">40</div><div class="tick t50">50</div><div class="tick t60">60</div><div class="tick t70">70</div><div class="tick t80">80</div><div class="tick t90">90</div><div class="tick t100">100</div>
-<div class="needle" style="transform:rotate({{ weight_angle }}deg)"></div><div class="center"></div><div class="score">{{ weight_meter }}</div>
-</div><div class="labels"><span>Bearish</span><span>50</span><span>Bullish</span></div>
-</div>
+<div class="needle" style="transform:rotate({{ weight_angle }}deg)"></div><div class="center"></div><div class="score">{{ weight_meter }}</div></div>
+<div class="labels"><span>Bearish</span><span>50</span><span>Bullish</span></div></div>
 
-<div class="card meterbox">
-<h3>Price Movement Meter</h3>
-<div class="gauge">
+<div class="card meterbox"><h3>Price Movement Meter</h3><div class="gauge">
 <div class="tick t10">10</div><div class="tick t20">20</div><div class="tick t30">30</div><div class="tick t40">40</div><div class="tick t50">50</div><div class="tick t60">60</div><div class="tick t70">70</div><div class="tick t80">80</div><div class="tick t90">90</div><div class="tick t100">100</div>
-<div class="needle" style="transform:rotate({{ price_angle }}deg)"></div><div class="center"></div><div class="score">{{ price_meter }}</div>
-</div><div class="labels"><span>Bearish</span><span>50</span><span>Bullish</span></div>
-</div>
+<div class="needle" style="transform:rotate({{ price_angle }}deg)"></div><div class="center"></div><div class="score">{{ price_meter }}</div></div>
+<div class="labels"><span>Bearish</span><span>50</span><span>Bullish</span></div></div>
 
 <div class="card">Direction: <span class="big">{{ direction }}</span></div>
 <div class="card">Green: <span class="big green">{{ green }} ({{ green_pct }}%)</span></div>
@@ -167,7 +165,7 @@ let supportLine = null, resistanceLine = null;
 
 function setActive(tf){
  document.querySelectorAll("button").forEach(b=>b.classList.remove("active"));
- document.querySelectorAll("button").forEach(b=>{if(b.innerText===tf)b.classList.add("active")});
+ document.querySelectorAll("button").forEach(b=>{if(b.innerText==="5 Min" && tf==="5M")b.classList.add("active");if(b.innerText==="1 Hour" && tf==="1H")b.classList.add("active");if(b.innerText==="1 Day" && tf==="1D")b.classList.add("active");});
 }
 function drawSavedLines(){
  let sup = localStorage.getItem(selectedIndex+"_support");
@@ -196,7 +194,7 @@ function loadChart(tf){
    document.getElementById("status").innerText=tf+" candles: "+d.candles.length;
  }).catch(e=>{document.getElementById("status").innerText="Chart failed";});
 }
-loadChart("1D");
+loadChart("5M");
 </script>
 </body>
 </html>
@@ -231,7 +229,11 @@ def home():
 
     weights=cfg["weights"]
     keys=[instruments[s] for s in weights if s in instruments]
-    data=requests.get("https://api.upstox.com/v2/market-quote/quotes",headers=auth_headers(),params={"instrument_key":",".join(keys)},timeout=15).json()["data"]
+
+    try:
+        data=requests.get("https://api.upstox.com/v2/market-quote/quotes",headers=auth_headers(),params={"instrument_key":",".join(keys)},timeout=15).json()["data"]
+    except Exception as e:
+        return "Upstox API Error: " + str(e)
 
     green=red=flat=0
     total_plus=total_minus=pos_imp=neg_imp=0
