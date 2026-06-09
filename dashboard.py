@@ -1,7 +1,8 @@
-from flask import Flask, render_template_string, request
+from flask import Flask, render_template_string, request, jsonify
 from markupsafe import Markup
 import requests, os
-from datetime import datetime
+from datetime import datetime, timedelta
+from urllib.parse import quote
 
 app = Flask(__name__)
 TOKEN = os.environ.get("UPSTOX_TOKEN")
@@ -40,16 +41,73 @@ banknifty_weights = {
 }
 
 configs = {
-"NIFTY": {"title":"NIFTY 50","index_key":"NSE_INDEX|Nifty 50","tv_symbol":"NSE:NIFTY","weights":nifty_weights,"analysis":True},
-"BANKNIFTY": {"title":"BANKNIFTY","index_key":"NSE_INDEX|Nifty Bank","tv_symbol":"NSE:BANKNIFTY","weights":banknifty_weights,"analysis":True},
-"SENSEX": {"title":"SENSEX","index_key":"BSE_INDEX|SENSEX","tv_symbol":"BSE:SENSEX","weights":{},"analysis":False}
+"NIFTY": {"title":"NIFTY 50","index_key":"NSE_INDEX|Nifty 50","weights":nifty_weights,"analysis":True},
+"BANKNIFTY": {"title":"BANKNIFTY","index_key":"NSE_INDEX|Nifty Bank","weights":banknifty_weights,"analysis":True},
+"SENSEX": {"title":"SENSEX","index_key":"BSE_INDEX|SENSEX","weights":{},"analysis":False}
 }
+
+def h():
+    return {"Accept":"application/json","Authorization":"Bearer " + TOKEN}
+
+def make_rows(items):
+    out = ""
+    for r in items:
+        cls = "green" if r["impact"] > 0 else "red"
+        rc = "green" if r["rupee"] > 0 else "red"
+        out += f"<tr><td>{r['symbol']}</td><td>{r['price']}</td><td class='{rc}'>{r['rupee']}</td><td class='{cls}'>{r['pct']}%</td><td>{r['weight']}%</td><td class='{cls}'>{r['impact']}</td></tr>"
+    return Markup(out)
+
+@app.route("/candles")
+def candles():
+    if not TOKEN:
+        return jsonify({"error":"Token missing"})
+
+    idx = request.args.get("index","NIFTY").upper()
+    tf = request.args.get("tf","1D")
+    if idx not in configs:
+        idx = "NIFTY"
+
+    key = quote(configs[idx]["index_key"], safe="")
+    today = datetime.now().date()
+
+    try:
+        if tf == "1D":
+            url = f"https://api.upstox.com/v3/historical-candle/intraday/{key}/minutes/5"
+        elif tf == "5D":
+            url = f"https://api.upstox.com/v3/historical-candle/{key}/minutes/30/{today}/{today-timedelta(days=8)}"
+        elif tf == "1M":
+            url = f"https://api.upstox.com/v3/historical-candle/{key}/hours/1/{today}/{today-timedelta(days=35)}"
+        elif tf == "3M":
+            url = f"https://api.upstox.com/v3/historical-candle/{key}/days/1/{today}/{today-timedelta(days=100)}"
+        elif tf == "6M":
+            url = f"https://api.upstox.com/v3/historical-candle/{key}/days/1/{today}/{today-timedelta(days=200)}"
+        elif tf == "1Y":
+            url = f"https://api.upstox.com/v3/historical-candle/{key}/weeks/1/{today}/{today-timedelta(days=370)}"
+        else:
+            url = f"https://api.upstox.com/v3/historical-candle/intraday/{key}/minutes/5"
+
+        r = requests.get(url, headers=h(), timeout=20)
+        js = r.json()
+        raw = js.get("data",{}).get("candles",[])
+        out = []
+        for c in raw:
+            out.append({
+                "time": int(datetime.fromisoformat(c[0].replace("Z","+00:00")).timestamp()),
+                "open": float(c[1]),
+                "high": float(c[2]),
+                "low": float(c[3]),
+                "close": float(c[4])
+            })
+        return jsonify({"candles": list(reversed(out))})
+    except Exception as e:
+        return jsonify({"error": str(e)})
 
 HTML = """
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ title }} V17 Dashboard</title>
+<title>{{ title }} V18 Dashboard</title>
+<script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
 <style>
 body{font-family:Arial;background:#f4f6f8;padding:12px;margin:0}
 h2{text-align:center}.card{background:white;padding:14px;margin:8px;border-radius:14px;box-shadow:0 2px 5px #ddd}
@@ -57,9 +115,10 @@ h2{text-align:center}.card{background:white;padding:14px;margin:8px;border-radiu
 .big{font-size:23px;font-weight:bold}.green{color:green;font-weight:bold}.red{color:red;font-weight:bold}
 table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:7px;border-bottom:1px solid #ddd;text-align:left}
 select{font-size:18px;padding:10px;border-radius:10px;width:100%}.small{text-align:center;color:#555}
+button{padding:9px;margin:3px;border:0;border-radius:8px;background:#e8eaed;font-weight:bold}
+button.active{background:#111;color:white}
 input{padding:10px;border-radius:8px;border:1px solid #ccc;width:38%;margin:3px}
-button{padding:10px;border-radius:8px;border:0;margin:3px;font-weight:bold}
-.tvbox{height:650px}@media (orientation:landscape){.tvbox{height:520px}}
+#chart{height:520px}@media (orientation:landscape){#chart{height:430px}}
 .meterbox{text-align:center}.gauge{width:280px;height:170px;margin:15px auto;position:relative;overflow:hidden}
 .gauge:before{content:"";position:absolute;left:20px;top:20px;width:240px;height:240px;border-radius:50%;background:conic-gradient(from 270deg,#d93025 0deg 80deg,#fbbc04 80deg 100deg,#0a9f45 100deg 180deg,transparent 180deg 360deg)}
 .gauge:after{content:"";position:absolute;left:60px;top:60px;width:160px;height:160px;background:white;border-radius:50%}
@@ -73,8 +132,7 @@ button{padding:10px;border-radius:8px;border:0;margin:3px;font-weight:bold}
 </style>
 </head>
 <body>
-
-<h2>{{ title }} V17 DASHBOARD</h2>
+<h2>{{ title }} V18 DASHBOARD</h2>
 
 <div class="card">
 <select onchange="changeIndex(this.value)">
@@ -88,22 +146,23 @@ button{padding:10px;border-radius:8px;border:0;margin:3px;font-weight:bold}
 <div class="signal" style="background:{{ color }}">{{ final_decision }}</div>
 
 <div class="card">
-<h3>{{ title }} TradingView Chart</h3>
-<div class="tvbox" id="tv_chart"></div>
-<p class="small">TradingView drawing tools free widget માં chart ઉપર save નથી થતી. નીચે levels save થશે.</p>
+<h3>{{ title }} Candlestick Chart</h3>
+<button onclick="loadChart('1D')" class="active">1D</button>
+<button onclick="loadChart('5D')">5D</button>
+<button onclick="loadChart('1M')">1M</button>
+<button onclick="loadChart('3M')">3M</button>
+<button onclick="loadChart('6M')">6M</button>
+<button onclick="loadChart('1Y')">1Y</button>
+<p id="status" class="small">Loading...</p>
+<div id="chart"></div>
 </div>
 
 <div class="card">
 <h3>Saved Support / Resistance</h3>
-<input id="supportInput" placeholder="Support price">
-<button onclick="saveSupport()">Save Support</button>
-<br>
-<input id="resistanceInput" placeholder="Resistance price">
-<button onclick="saveResistance()">Save Resistance</button>
-<br><br>
-<div>Saved Support: <span class="big green" id="savedSupport">-</span></div>
-<div>Saved Resistance: <span class="big red" id="savedResistance">-</span></div>
-<br>
+<input id="supportInput" placeholder="Support price"><button onclick="saveSupport()">Save Support</button><br>
+<input id="resistanceInput" placeholder="Resistance price"><button onclick="saveResistance()">Save Resistance</button><br><br>
+Saved Support: <span class="big green" id="savedSupport">-</span><br>
+Saved Resistance: <span class="big red" id="savedResistance">-</span><br><br>
 <button onclick="clearSR()">Clear Saved Levels</button>
 </div>
 
@@ -127,7 +186,6 @@ button{padding:10px;border-radius:8px;border:0;margin:3px;font-weight:bold}
 </div>
 
 <div class="card">Direction: <span class="big">{{ direction }}</span></div>
-<div class="card">Reason: <span class="big">{{ reason }}</span></div>
 <div class="card">Green: <span class="big green">{{ green }} ({{ green_pct }}%)</span></div>
 <div class="card">Red: <span class="big red">{{ red }} ({{ red_pct }}%)</span></div>
 <div class="card">Net Impact: <span class="big">{{ net_impact }}</span></div>
@@ -138,173 +196,150 @@ button{padding:10px;border-radius:8px;border:0;margin:3px;font-weight:bold}
 <div class="card"><h3>Top Pullers</h3><table><tr><th>Stock</th><th>Price</th><th>₹</th><th>%</th><th>Wt</th><th>Impact</th></tr>{{ pullers }}</table></div>
 <div class="card"><h3>Top Draggers</h3><table><tr><th>Stock</th><th>Price</th><th>₹</th><th>%</th><th>Wt</th><th>Impact</th></tr>{{ draggers }}</table></div>
 {% else %}
-<div class="card">SENSEX માટે હાલમાં chart + index price + saved support/resistance છે. Meter માટે Sensex exact weights manually add કરવા પડશે.</div>
+<div class="card">SENSEX માટે chart + saved support/resistance છે. Meter માટે Sensex weights manually add કરવા પડશે.</div>
 {% endif %}
 
 <p class="small">Updated: {{ time }}</p>
 
-<script src="https://s3.tradingview.com/tv.js"></script>
 <script>
-function changeIndex(v){
-  localStorage.setItem("selectedIndex", v);
-  window.location.href = "/?index=" + v;
-}
+const selectedIndex = "{{ selected }}";
+function changeIndex(v){ window.location.href="/?index="+v; }
 
-new TradingView.widget({
-  "autosize": true,
-  "symbol": "{{ tv_symbol }}",
-  "interval": "5",
-  "timezone": "Asia/Kolkata",
-  "theme": "light",
-  "style": "1",
-  "locale": "in",
-  "toolbar_bg": "#f1f3f6",
-  "enable_publishing": false,
-  "allow_symbol_change": false,
-  "hide_side_toolbar": false,
-  "details": true,
-  "calendar": false,
-  "container_id": "tv_chart"
+let chart = LightweightCharts.createChart(document.getElementById('chart'), {
+    layout:{background:{color:'#ffffff'},textColor:'#222'},
+    grid:{vertLines:{color:'#eee'},horzLines:{color:'#eee'}},
+    timeScale:{timeVisible:true,secondsVisible:false},
+    rightPriceScale:{borderVisible:false}
 });
+let candleSeries = chart.addCandlestickSeries();
+let supportLine = null, resistanceLine = null;
 
-function keyBase(){ return "{{ selected }}"; }
+function setActive(tf){
+ document.querySelectorAll("button").forEach(b=>b.classList.remove("active"));
+ document.querySelectorAll("button").forEach(b=>{if(b.innerText===tf)b.classList.add("active")});
+}
 
-function loadSR(){
-  let sup = localStorage.getItem(keyBase() + "_support");
-  let res = localStorage.getItem(keyBase() + "_resistance");
-  document.getElementById("savedSupport").innerText = sup ? sup : "-";
-  document.getElementById("savedResistance").innerText = res ? res : "-";
-  document.getElementById("supportInput").value = sup ? sup : "";
-  document.getElementById("resistanceInput").value = res ? res : "";
+function drawSavedLines(){
+ let sup = localStorage.getItem(selectedIndex+"_support");
+ let res = localStorage.getItem(selectedIndex+"_resistance");
+ document.getElementById("savedSupport").innerText = sup ? sup : "-";
+ document.getElementById("savedResistance").innerText = res ? res : "-";
+ document.getElementById("supportInput").value = sup ? sup : "";
+ document.getElementById("resistanceInput").value = res ? res : "";
+
+ if(supportLine){ candleSeries.removePriceLine(supportLine); supportLine=null; }
+ if(resistanceLine){ candleSeries.removePriceLine(resistanceLine); resistanceLine=null; }
+
+ if(sup){
+   supportLine = candleSeries.createPriceLine({price:Number(sup),color:"green",lineWidth:3,lineStyle:LightweightCharts.LineStyle.Solid,axisLabelVisible:true,title:"Support"});
+ }
+ if(res){
+   resistanceLine = candleSeries.createPriceLine({price:Number(res),color:"red",lineWidth:3,lineStyle:LightweightCharts.LineStyle.Solid,axisLabelVisible:true,title:"Resistance"});
+ }
 }
-function saveSupport(){
-  let val = document.getElementById("supportInput").value;
-  if(val){ localStorage.setItem(keyBase() + "_support", val); loadSR(); }
+
+function saveSupport(){ let v=document.getElementById("supportInput").value; if(v){localStorage.setItem(selectedIndex+"_support",v); drawSavedLines();} }
+function saveResistance(){ let v=document.getElementById("resistanceInput").value; if(v){localStorage.setItem(selectedIndex+"_resistance",v); drawSavedLines();} }
+function clearSR(){ localStorage.removeItem(selectedIndex+"_support"); localStorage.removeItem(selectedIndex+"_resistance"); drawSavedLines(); }
+
+function loadChart(tf){
+ setActive(tf);
+ document.getElementById("status").innerText="Loading "+tf+"...";
+ fetch("/candles?index="+selectedIndex+"&tf="+tf)
+ .then(r=>r.json())
+ .then(d=>{
+   if(d.error){document.getElementById("status").innerText="Error: "+d.error;return;}
+   candleSeries.setData(d.candles);
+   chart.timeScale().fitContent();
+   drawSavedLines();
+   document.getElementById("status").innerText=tf+" candles: "+d.candles.length;
+ })
+ .catch(e=>{document.getElementById("status").innerText="Chart failed";});
 }
-function saveResistance(){
-  let val = document.getElementById("resistanceInput").value;
-  if(val){ localStorage.setItem(keyBase() + "_resistance", val); loadSR(); }
-}
-function clearSR(){
-  localStorage.removeItem(keyBase() + "_support");
-  localStorage.removeItem(keyBase() + "_resistance");
-  loadSR();
-}
-loadSR();
+loadChart("1D");
 </script>
 </body>
 </html>
 """
 
-def make_rows(items):
-    out = ""
-    for r in items:
-        cls = "green" if r["impact"] > 0 else "red"
-        rc = "green" if r["rupee"] > 0 else "red"
-        out += f"<tr><td>{r['symbol']}</td><td>{r['price']}</td><td class='{rc}'>{r['rupee']}</td><td class='{cls}'>{r['pct']}%</td><td>{r['weight']}%</td><td class='{cls}'>{r['impact']}</td></tr>"
-    return Markup(out)
-
 @app.route("/")
 def home():
-    selected = request.args.get("index", "NIFTY").upper()
+    selected = request.args.get("index","NIFTY").upper()
     if selected not in configs:
         selected = "NIFTY"
-
     cfg = configs[selected]
+
     if not TOKEN:
         return "UPSTOX_TOKEN missing"
 
-    h = {"Accept":"application/json","Authorization":"Bearer " + TOKEN}
-
     try:
-        idx = requests.get("https://api.upstox.com/v2/market-quote/ltp", headers=h, params={"instrument_key":cfg["index_key"]}, timeout=10).json()
+        idx = requests.get("https://api.upstox.com/v2/market-quote/ltp",headers=h(),params={"instrument_key":cfg["index_key"]},timeout=10).json()
         index_price = list(idx["data"].values())[0]["last_price"]
     except:
         index_price = "Error"
 
-    base = dict(
-        selected=selected, title=cfg["title"], tv_symbol=cfg["tv_symbol"],
-        index_price=index_price, analysis=cfg["analysis"], time=datetime.now().strftime("%d-%m-%Y %H:%M:%S")
-    )
+    base = dict(selected=selected,title=cfg["title"],index_price=index_price,analysis=cfg["analysis"],time=datetime.now().strftime("%d-%m-%Y %H:%M:%S"))
 
     if not cfg["analysis"]:
-        return render_template_string(
-            HTML, **base, final_decision="CHART MODE", color="#fff3cd",
-            weight_angle=0, price_angle=0, weight_meter=50, price_meter=50,
-            direction="", reason="", green=0, red=0, green_pct=0, red_pct=0,
-            net_impact=0, call_pressure=0, put_pressure=0, entry_advice="",
-            pullers=Markup(""), draggers=Markup("")
-        )
+        return render_template_string(HTML, **base, final_decision="CHART MODE", color="#fff3cd",
+            weight_meter=50,price_meter=50,weight_angle=0,price_angle=0,direction="",green=0,red=0,green_pct=0,red_pct=0,
+            net_impact=0,call_pressure=0,put_pressure=0,entry_advice="",pullers=Markup(""),draggers=Markup(""))
 
     weights = cfg["weights"]
     keys = [instruments[s] for s in weights if s in instruments]
 
     try:
-        data = requests.get("https://api.upstox.com/v2/market-quote/quotes", headers=h, params={"instrument_key":",".join(keys)}, timeout=15).json()["data"]
+        data = requests.get("https://api.upstox.com/v2/market-quote/quotes",headers=h(),params={"instrument_key":",".join(keys)},timeout=15).json()["data"]
     except Exception as e:
-        return "Upstox API Error: " + str(e)
+        return "Upstox API Error: "+str(e)
 
-    green = red = flat = 0
-    total_plus = total_minus = pos_imp = neg_imp = 0
-    rows = []
+    green=red=flat=0
+    total_plus=total_minus=pos_imp=neg_imp=0
+    rows=[]
 
     for s in data.values():
-        symbol = s.get("symbol","")
-        price = round(s.get("last_price",0),2)
-        close = s.get("ohlc",{}).get("close",0)
-        rupee = round(s.get("net_change",0),2)
-        pct = round((rupee/close)*100,2) if close else 0
-        wt = weights.get(symbol,0)
-        impact = round(wt*pct,2)
+        symbol=s.get("symbol","")
+        price=round(s.get("last_price",0),2)
+        close=s.get("ohlc",{}).get("close",0)
+        rupee=round(s.get("net_change",0),2)
+        pct=round((rupee/close)*100,2) if close else 0
+        wt=weights.get(symbol,0)
+        impact=round(wt*pct,2)
 
-        if rupee > 0:
-            green += 1; total_plus += rupee; pos_imp += impact
-        elif rupee < 0:
-            red += 1; total_minus += rupee; neg_imp += impact
+        if rupee>0:
+            green+=1; total_plus+=rupee; pos_imp+=impact
+        elif rupee<0:
+            red+=1; total_minus+=rupee; neg_imp+=impact
         else:
-            flat += 1
-
+            flat+=1
         rows.append({"symbol":symbol,"price":price,"rupee":rupee,"pct":pct,"weight":wt,"impact":impact})
 
-    total = green + red + flat
-    green_pct = round(green*100/total,1) if total else 0
-    red_pct = round(red*100/total,1) if total else 0
-    pos_imp = round(pos_imp,2)
-    neg_imp = round(neg_imp,2)
-    net_impact = round(pos_imp + neg_imp,2)
+    total=green+red+flat
+    green_pct=round(green*100/total,1) if total else 0
+    red_pct=round(red*100/total,1) if total else 0
+    pos_imp=round(pos_imp,2); neg_imp=round(neg_imp,2)
+    net_impact=round(pos_imp+neg_imp,2)
+    impact_total=pos_imp+abs(neg_imp)
+    weight_meter=round((pos_imp/impact_total)*100,1) if impact_total>0 else 50
+    rupee_total=total_plus+abs(total_minus)
+    price_meter=round((total_plus/rupee_total)*100,1) if rupee_total>0 else 50
+    weight_angle=round(-90+weight_meter*1.8,1)
+    price_angle=round(-90+price_meter*1.8,1)
+    call_pressure=weight_meter
+    put_pressure=round(100-weight_meter,1)
 
-    impact_total = pos_imp + abs(neg_imp)
-    weight_meter = round((pos_imp/impact_total)*100,1) if impact_total > 0 else 50
-
-    rupee_total = total_plus + abs(total_minus)
-    price_meter = round((total_plus/rupee_total)*100,1) if rupee_total > 0 else 50
-
-    weight_angle = round(-90 + weight_meter*1.8,1)
-    price_angle = round(-90 + price_meter*1.8,1)
-    call_pressure = weight_meter
-    put_pressure = round(100-weight_meter,1)
-
-    if weight_meter >= 65:
-        final_decision, direction, entry_advice, color = "CALL SIDE BULLISH", "BULLISH", "Call after breakout only", "#d9fbe6"
-        reason = "Weightage meter 50 ઉપર છે."
-    elif weight_meter <= 35:
-        final_decision, direction, entry_advice, color = "PUT SIDE BEARISH", "BEARISH", "Put after breakdown only", "#ffe1e1"
-        reason = "Weightage meter 50 નીચે છે."
+    if weight_meter>=65:
+        final_decision,direction,entry_advice,color="CALL SIDE BULLISH","BULLISH","Call after breakout only","#d9fbe6"
+    elif weight_meter<=35:
+        final_decision,direction,entry_advice,color="PUT SIDE BEARISH","BEARISH","Put after breakdown only","#ffe1e1"
     else:
-        final_decision, direction, entry_advice, color = "NO TRADE / SIDEWAYS", "CHOPPY", "Avoid option buying", "#fff3cd"
-        reason = "Meter 35 થી 65 વચ્ચે છે."
+        final_decision,direction,entry_advice,color="NO TRADE / SIDEWAYS","CHOPPY","Avoid option buying","#fff3cd"
 
-    pullers = sorted([r for r in rows if r["impact"] > 0], key=lambda x:x["impact"], reverse=True)[:10]
-    draggers = sorted([r for r in rows if r["impact"] < 0], key=lambda x:x["impact"])[:10]
+    pullers=sorted([r for r in rows if r["impact"]>0],key=lambda x:x["impact"],reverse=True)[:10]
+    draggers=sorted([r for r in rows if r["impact"]<0],key=lambda x:x["impact"])[:10]
 
-    return render_template_string(
-        HTML, **base,
-        final_decision=final_decision, color=color,
-        weight_meter=weight_meter, price_meter=price_meter,
-        weight_angle=weight_angle, price_angle=price_angle,
-        direction=direction, reason=reason,
-        green=green, red=red, green_pct=green_pct, red_pct=red_pct,
-        net_impact=net_impact, call_pressure=call_pressure, put_pressure=put_pressure,
-        entry_advice=entry_advice,
-        pullers=make_rows(pullers), draggers=make_rows(draggers)
-    )
+    return render_template_string(HTML, **base, final_decision=final_decision,color=color,
+        weight_meter=weight_meter,price_meter=price_meter,weight_angle=weight_angle,price_angle=price_angle,
+        direction=direction,green=green,red=red,green_pct=green_pct,red_pct=red_pct,net_impact=net_impact,
+        call_pressure=call_pressure,put_pressure=put_pressure,entry_advice=entry_advice,
+        pullers=make_rows(pullers),draggers=make_rows(draggers))
