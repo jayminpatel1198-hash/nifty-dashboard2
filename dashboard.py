@@ -12,9 +12,13 @@ instruments = {
 "BHARTIARTL":"NSE_EQ|INE397D01024","LT":"NSE_EQ|INE018A01030","INFY":"NSE_EQ|INE009A01021","ITC":"NSE_EQ|INE154A01025","M&M":"NSE_EQ|INE101A01026","TCS":"NSE_EQ|INE467B01029","BAJFINANCE":"NSE_EQ|INE296A01032","HINDUNILVR":"NSE_EQ|INE030A01027","SUNPHARMA":"NSE_EQ|INE044A01036","NTPC":"NSE_EQ|INE733E01010","TITAN":"NSE_EQ|INE280A01028","TATASTEEL":"NSE_EQ|INE081A01020","MARUTI":"NSE_EQ|INE585B01010","BEL":"NSE_EQ|INE263A01024","HINDALCO":"NSE_EQ|INE038A01020","POWERGRID":"NSE_EQ|INE752E01010","ULTRACEMCO":"NSE_EQ|INE481G01011","HCLTECH":"NSE_EQ|INE860A01027","ADANIPORTS":"NSE_EQ|INE742F01042","JSWSTEEL":"NSE_EQ|INE019A01038","ONGC":"NSE_EQ|INE213A01029","ASIANPAINT":"NSE_EQ|INE021A01026","COALINDIA":"NSE_EQ|INE522F01014","GRASIM":"NSE_EQ|INE047A01021","NESTLEIND":"NSE_EQ|INE239A01024","BAJAJFINSV":"NSE_EQ|INE918I01026","TECHM":"NSE_EQ|INE669C01036","TRENT":"NSE_EQ|INE849A01020","DRREDDY":"NSE_EQ|INE089A01031","CIPLA":"NSE_EQ|INE059A01026","ADANIENT":"NSE_EQ|INE423A01024","WIPRO":"NSE_EQ|INE075A01022"
 }
 
-nifty_weights = {"HDFCBANK":10.73,"RELIANCE":8.78,"ICICIBANK":8.21,"BHARTIARTL":5.26,"LT":4.28,"SBIN":4.03,"INFY":3.76,"AXISBANK":3.31,"ITC":2.76,"KOTAKBANK":2.56,"M&M":2.51,"TCS":2.30,"BAJFINANCE":2.28,"HINDUNILVR":1.81,"SUNPHARMA":1.74,"NTPC":1.72,"TITAN":1.64,"TATASTEEL":1.59,"MARUTI":1.59,"BEL":1.40,"HINDALCO":1.37,"POWERGRID":1.31,"ULTRACEMCO":1.25,"HCLTECH":1.15,"ADANIPORTS":1.11,"JSWSTEEL":1.08,"ONGC":1.06,"ASIANPAINT":1.00,"COALINDIA":0.99,"GRASIM":0.97,"NESTLEIND":0.95,"BAJAJFINSV":0.92,"TECHM":0.85,"TRENT":0.84,"DRREDDY":0.73,"CIPLA":0.67,"ADANIENT":0.63,"WIPRO":0.52}
+nifty_weights = {
+"HDFCBANK":10.73,"RELIANCE":8.78,"ICICIBANK":8.21,"BHARTIARTL":5.26,"LT":4.28,"SBIN":4.03,"INFY":3.76,"AXISBANK":3.31,"ITC":2.76,"KOTAKBANK":2.56,"M&M":2.51,"TCS":2.30,"BAJFINANCE":2.28,"HINDUNILVR":1.81,"SUNPHARMA":1.74,"NTPC":1.72,"TITAN":1.64,"TATASTEEL":1.59,"MARUTI":1.59,"BEL":1.40,"HINDALCO":1.37,"POWERGRID":1.31,"ULTRACEMCO":1.25,"HCLTECH":1.15,"ADANIPORTS":1.11,"JSWSTEEL":1.08,"ONGC":1.06,"ASIANPAINT":1.00,"COALINDIA":0.99,"GRASIM":0.97,"NESTLEIND":0.95,"BAJAJFINSV":0.92,"TECHM":0.85,"TRENT":0.84,"DRREDDY":0.73,"CIPLA":0.67,"ADANIENT":0.63,"WIPRO":0.52
+}
 
-bank_weights = {"HDFCBANK":28,"ICICIBANK":24,"SBIN":11,"KOTAKBANK":10,"AXISBANK":9,"INDUSINDBK":5,"BANKBARODA":4,"PNB":3,"CANBK":2.5,"FEDERALBNK":1.5,"IDFCFIRSTB":1,"AUBANK":1}
+bank_weights = {
+"HDFCBANK":28,"ICICIBANK":24,"SBIN":11,"KOTAKBANK":10,"AXISBANK":9,"INDUSINDBK":5,"BANKBARODA":4,"PNB":3,"CANBK":2.5,"FEDERALBNK":1.5,"IDFCFIRSTB":1,"AUBANK":1
+}
 
 configs = {
 "NIFTY":{"title":"NIFTY 50","index_key":"NSE_INDEX|Nifty 50","weights":nifty_weights},
@@ -25,10 +29,19 @@ configs = {
 def auth_headers():
     return {"Accept":"application/json","Authorization":"Bearer " + TOKEN}
 
+def make_rows(items):
+    out = ""
+    for r in items:
+        cls = "green" if r["impact"] > 0 else "red"
+        rc = "green" if r["rupee"] > 0 else "red"
+        out += f"<tr><td>{r['symbol']}</td><td>{r['price']}</td><td class='{rc}'>{r['rupee']}</td><td class='{cls}'>{r['pct']}%</td><td>{r['weight']}%</td><td class='{cls}'>{r['impact']}</td></tr>"
+    return Markup(out)
+
 @app.route("/candles")
 def candles():
-    idx = request.args.get("index","NIFTY").upper()
-    tf = request.args.get("tf","5M")
+    idx = request.args.get("index", "NIFTY").upper()
+    tf = request.args.get("tf", "5M")
+
     if idx not in configs:
         idx = "NIFTY"
 
@@ -36,22 +49,32 @@ def candles():
     today = datetime.now().date()
 
     try:
+        raw = []
+
         if tf == "5M":
             url = f"https://api.upstox.com/v3/historical-candle/intraday/{key}/minutes/5"
+            js = requests.get(url, headers=auth_headers(), timeout=20).json()
+            raw = js.get("data", {}).get("candles", [])
+
+            if not raw:
+                url = f"https://api.upstox.com/v3/historical-candle/{key}/minutes/5/{today}/{today-timedelta(days=5)}"
+                js = requests.get(url, headers=auth_headers(), timeout=20).json()
+                raw = js.get("data", {}).get("candles", [])
+
         elif tf == "1H":
             url = f"https://api.upstox.com/v3/historical-candle/{key}/hours/1/{today}/{today-timedelta(days=30)}"
+            js = requests.get(url, headers=auth_headers(), timeout=20).json()
+            raw = js.get("data", {}).get("candles", [])
+
         elif tf == "1D":
             url = f"https://api.upstox.com/v3/historical-candle/{key}/days/1/{today}/{today-timedelta(days=365)}"
-        else:
-            url = f"https://api.upstox.com/v3/historical-candle/intraday/{key}/minutes/5"
-
-        js = requests.get(url, headers=auth_headers(), timeout=20).json()
-        raw = js.get("data",{}).get("candles",[])
+            js = requests.get(url, headers=auth_headers(), timeout=20).json()
+            raw = js.get("data", {}).get("candles", [])
 
         out = []
         for c in raw:
             out.append({
-                "time": int(datetime.fromisoformat(c[0].replace("Z","+00:00")).timestamp()),
+                "time": int(datetime.fromisoformat(c[0].replace("Z", "+00:00")).timestamp()),
                 "open": float(c[1]),
                 "high": float(c[2]),
                 "low": float(c[3]),
@@ -59,6 +82,7 @@ def candles():
             })
 
         return jsonify({"candles": list(reversed(out))})
+
     except Exception as e:
         return jsonify({"error": str(e)})
 
@@ -66,21 +90,27 @@ HTML = """
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ title }} Dashboard</title>
+<title>{{ title }} V19 Dashboard</title>
 <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
 <style>
 body{font-family:Arial;background:#f4f6f8;padding:12px;margin:0}
-h2{text-align:center}.card{background:white;padding:14px;margin:8px;border-radius:14px;box-shadow:0 2px 5px #ddd}
+h2{text-align:center}
+.card{background:white;padding:14px;margin:8px;border-radius:14px;box-shadow:0 2px 5px #ddd}
 .signal{padding:18px;border-radius:16px;text-align:center;font-size:23px;font-weight:bold;margin:8px}
-.big{font-size:23px;font-weight:bold}.green{color:green;font-weight:bold}.red{color:red;font-weight:bold}
-table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:7px;border-bottom:1px solid #ddd;text-align:left}
-select{font-size:18px;padding:10px;border-radius:10px;width:100%}.small{text-align:center;color:#555}
+.big{font-size:23px;font-weight:bold}
+.green{color:green;font-weight:bold}
+.red{color:red;font-weight:bold}
+table{width:100%;border-collapse:collapse;font-size:13px}
+td,th{padding:7px;border-bottom:1px solid #ddd;text-align:left}
+select{font-size:18px;padding:10px;border-radius:10px;width:100%}
+.small{text-align:center;color:#555}
 button{padding:9px;margin:3px;border:0;border-radius:8px;background:#e8eaed;font-weight:bold}
 button.active{background:#111;color:white}
 input{padding:10px;border-radius:8px;border:1px solid #ccc;width:38%;margin:3px}
 .chartbox{height:540px}
 @media (orientation:landscape){.chartbox{height:430px}}
-.meterbox{text-align:center}.gauge{width:280px;height:170px;margin:15px auto;position:relative;overflow:hidden}
+.meterbox{text-align:center}
+.gauge{width:280px;height:170px;margin:15px auto;position:relative;overflow:hidden}
 .gauge:before{content:"";position:absolute;left:20px;top:20px;width:240px;height:240px;border-radius:50%;background:conic-gradient(from 270deg,#d93025 0deg 80deg,#fbbc04 80deg 100deg,#0a9f45 100deg 180deg,transparent 180deg 360deg)}
 .gauge:after{content:"";position:absolute;left:60px;top:60px;width:160px;height:160px;background:white;border-radius:50%}
 .needle{position:absolute;left:138px;top:130px;width:5px;height:105px;background:#111;transform-origin:2.5px 2.5px;z-index:3;border-radius:5px}
@@ -92,7 +122,7 @@ input{padding:10px;border-radius:8px;border:1px solid #ccc;width:38%;margin:3px}
 </style>
 </head>
 <body>
-<h2>{{ title }} DASHBOARD</h2>
+<h2>{{ title }} V19 DASHBOARD</h2>
 
 <div class="card">
 <select onchange="changeIndex(this.value)">
@@ -165,7 +195,11 @@ let supportLine = null, resistanceLine = null;
 
 function setActive(tf){
  document.querySelectorAll("button").forEach(b=>b.classList.remove("active"));
- document.querySelectorAll("button").forEach(b=>{if(b.innerText==="5 Min" && tf==="5M")b.classList.add("active");if(b.innerText==="1 Hour" && tf==="1H")b.classList.add("active");if(b.innerText==="1 Day" && tf==="1D")b.classList.add("active");});
+ document.querySelectorAll("button").forEach(b=>{
+   if(b.innerText==="5 Min" && tf==="5M")b.classList.add("active");
+   if(b.innerText==="1 Hour" && tf==="1H")b.classList.add("active");
+   if(b.innerText==="1 Day" && tf==="1D")b.classList.add("active");
+ });
 }
 function drawSavedLines(){
  let sup = localStorage.getItem(selectedIndex+"_support");
@@ -188,6 +222,7 @@ function loadChart(tf){
  fetch("/candles?index="+selectedIndex+"&tf="+tf)
  .then(r=>r.json()).then(d=>{
    if(d.error){document.getElementById("status").innerText="Error: "+d.error;return;}
+   if(!d.candles || d.candles.length===0){document.getElementById("status").innerText="No candles found for "+tf;return;}
    candleSeries.setData(d.candles);
    chart.timeScale().fitContent();
    drawSavedLines();
@@ -200,82 +235,101 @@ loadChart("5M");
 </html>
 """
 
-def make_rows(items):
-    out=""
-    for r in items:
-        cls="green" if r["impact"]>0 else "red"
-        rc="green" if r["rupee"]>0 else "red"
-        out += f"<tr><td>{r['symbol']}</td><td>{r['price']}</td><td class='{rc}'>{r['rupee']}</td><td class='{cls}'>{r['pct']}%</td><td>{r['weight']}%</td><td class='{cls}'>{r['impact']}</td></tr>"
-    return Markup(out)
-
 @app.route("/")
 def home():
-    selected=request.args.get("index","NIFTY").upper()
+    selected = request.args.get("index","NIFTY").upper()
     if selected not in configs:
-        selected="NIFTY"
-    cfg=configs[selected]
+        selected = "NIFTY"
+    cfg = configs[selected]
+
     if not TOKEN:
         return "UPSTOX_TOKEN missing"
 
     try:
-        idx=requests.get("https://api.upstox.com/v2/market-quote/ltp",headers=auth_headers(),params={"instrument_key":cfg["index_key"]},timeout=10).json()
-        index_price=list(idx["data"].values())[0]["last_price"]
+        idx = requests.get("https://api.upstox.com/v2/market-quote/ltp", headers=auth_headers(), params={"instrument_key":cfg["index_key"]}, timeout=10).json()
+        index_price = list(idx["data"].values())[0]["last_price"]
     except:
-        index_price="Error"
+        index_price = "Error"
 
     analysis = bool(cfg["weights"])
     if not analysis:
-        return render_template_string(HTML, selected=selected,title=cfg["title"],index_price=index_price,analysis=False,time=datetime.now().strftime("%d-%m-%Y %H:%M:%S"),final_decision="CHART MODE",color="#fff3cd",weight_meter=50,price_meter=50,weight_angle=0,price_angle=0,direction="",green=0,red=0,green_pct=0,red_pct=0,net_impact=0,call_pressure=0,put_pressure=0,entry_advice="",pullers=Markup(""),draggers=Markup(""))
+        return render_template_string(
+            HTML, selected=selected, title=cfg["title"], index_price=index_price, analysis=False,
+            time=datetime.now().strftime("%d-%m-%Y %H:%M:%S"),
+            final_decision="CHART MODE", color="#fff3cd",
+            weight_meter=50, price_meter=50, weight_angle=0, price_angle=0,
+            direction="", green=0, red=0, green_pct=0, red_pct=0, net_impact=0,
+            call_pressure=0, put_pressure=0, entry_advice="", pullers=Markup(""), draggers=Markup("")
+        )
 
-    weights=cfg["weights"]
-    keys=[instruments[s] for s in weights if s in instruments]
+    weights = cfg["weights"]
+    keys = [instruments[s] for s in weights if s in instruments]
 
     try:
-        data=requests.get("https://api.upstox.com/v2/market-quote/quotes",headers=auth_headers(),params={"instrument_key":",".join(keys)},timeout=15).json()["data"]
+        data = requests.get("https://api.upstox.com/v2/market-quote/quotes", headers=auth_headers(), params={"instrument_key":",".join(keys)}, timeout=15).json()["data"]
     except Exception as e:
         return "Upstox API Error: " + str(e)
 
-    green=red=flat=0
-    total_plus=total_minus=pos_imp=neg_imp=0
-    rows=[]
+    green = red = flat = 0
+    total_plus = total_minus = pos_imp = neg_imp = 0
+    rows = []
+
     for s in data.values():
-        symbol=s.get("symbol","")
-        price=round(s.get("last_price",0),2)
-        close=s.get("ohlc",{}).get("close",0)
-        rupee=round(s.get("net_change",0),2)
-        pct=round((rupee/close)*100,2) if close else 0
-        wt=weights.get(symbol,0)
-        impact=round(wt*pct,2)
-        if rupee>0:
-            green+=1; total_plus+=rupee; pos_imp+=impact
-        elif rupee<0:
-            red+=1; total_minus+=rupee; neg_imp+=impact
+        symbol = s.get("symbol","")
+        price = round(s.get("last_price",0),2)
+        close = s.get("ohlc",{}).get("close",0)
+        rupee = round(s.get("net_change",0),2)
+        pct = round((rupee/close)*100,2) if close else 0
+        wt = weights.get(symbol,0)
+        impact = round(wt*pct,2)
+
+        if rupee > 0:
+            green += 1; total_plus += rupee; pos_imp += impact
+        elif rupee < 0:
+            red += 1; total_minus += rupee; neg_imp += impact
         else:
-            flat+=1
+            flat += 1
+
         rows.append({"symbol":symbol,"price":price,"rupee":rupee,"pct":pct,"weight":wt,"impact":impact})
 
-    total=green+red+flat
-    green_pct=round(green*100/total,1) if total else 0
-    red_pct=round(red*100/total,1) if total else 0
-    pos_imp=round(pos_imp,2); neg_imp=round(neg_imp,2)
-    net_impact=round(pos_imp+neg_imp,2)
-    impact_total=pos_imp+abs(neg_imp)
-    weight_meter=round((pos_imp/impact_total)*100,1) if impact_total>0 else 50
-    rupee_total=total_plus+abs(total_minus)
-    price_meter=round((total_plus/rupee_total)*100,1) if rupee_total>0 else 50
-    weight_angle=round(-90+weight_meter*1.8,1)
-    price_angle=round(-90+price_meter*1.8,1)
-    call_pressure=weight_meter
-    put_pressure=round(100-weight_meter,1)
+    total = green + red + flat
+    green_pct = round(green*100/total,1) if total else 0
+    red_pct = round(red*100/total,1) if total else 0
+    pos_imp = round(pos_imp,2)
+    neg_imp = round(neg_imp,2)
+    net_impact = round(pos_imp + neg_imp,2)
 
-    if weight_meter>=65:
-        final_decision,direction,entry_advice,color="CALL SIDE BULLISH","BULLISH","Call after breakout only","#d9fbe6"
-    elif weight_meter<=35:
-        final_decision,direction,entry_advice,color="PUT SIDE BEARISH","BEARISH","Put after breakdown only","#ffe1e1"
+    impact_total = pos_imp + abs(neg_imp)
+    weight_meter = round((pos_imp/impact_total)*100,1) if impact_total > 0 else 50
+
+    rupee_total = total_plus + abs(total_minus)
+    price_meter = round((total_plus/rupee_total)*100,1) if rupee_total > 0 else 50
+
+    weight_angle = round(-90 + weight_meter*1.8,1)
+    price_angle = round(-90 + price_meter*1.8,1)
+
+    call_pressure = weight_meter
+    put_pressure = round(100-weight_meter,1)
+
+    if weight_meter >= 65:
+        final_decision, direction, entry_advice, color = "CALL SIDE BULLISH", "BULLISH", "Call after breakout only", "#d9fbe6"
+    elif weight_meter <= 35:
+        final_decision, direction, entry_advice, color = "PUT SIDE BEARISH", "BEARISH", "Put after breakdown only", "#ffe1e1"
     else:
-        final_decision,direction,entry_advice,color="NO TRADE / SIDEWAYS","CHOPPY","Avoid option buying","#fff3cd"
+        final_decision, direction, entry_advice, color = "NO TRADE / SIDEWAYS", "CHOPPY", "Avoid option buying", "#fff3cd"
 
-    pullers=sorted([r for r in rows if r["impact"]>0],key=lambda x:x["impact"],reverse=True)[:10]
-    draggers=sorted([r for r in rows if r["impact"]<0],key=lambda x:x["impact"])[:10]
+    pullers = sorted([r for r in rows if r["impact"] > 0], key=lambda x:x["impact"], reverse=True)[:10]
+    draggers = sorted([r for r in rows if r["impact"] < 0], key=lambda x:x["impact"])[:10]
 
-    return render_template_string(HTML, selected=selected,title=cfg["title"],index_price=index_price,analysis=True,time=datetime.now().strftime("%d-%m-%Y %H:%M:%S"),final_decision=final_decision,color=color,weight_meter=weight_meter,price_meter=price_meter,weight_angle=weight_angle,price_angle=price_angle,direction=direction,green=green,red=red,green_pct=green_pct,red_pct=red_pct,net_impact=net_impact,call_pressure=call_pressure,put_pressure=put_pressure,entry_advice=entry_advice,pullers=make_rows(pullers),draggers=make_rows(draggers))
+    return render_template_string(
+        HTML, selected=selected, title=cfg["title"], index_price=index_price, analysis=True,
+        time=datetime.now().strftime("%d-%m-%Y %H:%M:%S"),
+        final_decision=final_decision, color=color,
+        weight_meter=weight_meter, price_meter=price_meter,
+        weight_angle=weight_angle, price_angle=price_angle,
+        direction=direction, green=green, red=red,
+        green_pct=green_pct, red_pct=red_pct,
+        net_impact=net_impact, call_pressure=call_pressure, put_pressure=put_pressure,
+        entry_advice=entry_advice,
+        pullers=make_rows(pullers), draggers=make_rows(draggers)
+            )
