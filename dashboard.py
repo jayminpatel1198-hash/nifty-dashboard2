@@ -19,75 +19,66 @@ HTML = """
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="refresh" content="5">
-<title>Nifty Weight Dashboard V7</title>
+<title>Nifty Impact Dashboard V9</title>
 <style>
-body{font-family:Arial;background:#f4f6f8;padding:14px;margin:0}
-h2{text-align:center}
-.card{background:white;padding:15px;margin:10px;border-radius:14px;box-shadow:0 2px 5px #ddd}
-.signal{padding:20px;border-radius:16px;text-align:center;font-size:24px;font-weight:bold;margin:10px}
-.big{font-size:24px;font-weight:bold}
-.green{color:green;font-weight:bold}
-.red{color:red;font-weight:bold}
-table{width:100%;border-collapse:collapse}
-td,th{padding:8px;border-bottom:1px solid #ddd;text-align:left}
+body{font-family:Arial;background:#f4f6f8;padding:12px;margin:0}
+h2{text-align:center}.card{background:white;padding:14px;margin:8px;border-radius:14px;box-shadow:0 2px 5px #ddd}
+.signal{padding:18px;border-radius:16px;text-align:center;font-size:23px;font-weight:bold;margin:8px}
+.big{font-size:23px;font-weight:bold}.green{color:green;font-weight:bold}.red{color:red;font-weight:bold}
+table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:7px;border-bottom:1px solid #ddd;text-align:left}
 .small{text-align:center;color:#555}
 </style>
 </head>
 <body>
-<h2>NIFTY WEIGHTAGE DASHBOARD V7</h2>
+<h2>NIFTY IMPACT DASHBOARD V9</h2>
 
 <div class="card">Nifty 50 Live: <span class="big">{{ nifty_price }}</span></div>
 <div class="signal" style="background:{{ color }}">{{ final_decision }}</div>
 
-<div class="card">Market Pull: <span class="big">{{ pull_direction }}</span></div>
+<div class="card">Direction: <span class="big">{{ direction }}</span></div>
 <div class="card">Reason: <span class="big">{{ reason }}</span></div>
 
-<div class="card">Stock Count Green: <span class="big green">{{ green }} ({{ green_pct }}%)</span></div>
-<div class="card">Stock Count Red: <span class="big red">{{ red }} ({{ red_pct }}%)</span></div>
-<div class="card">Green Weight: <span class="big green">{{ green_weight }}%</span></div>
-<div class="card">Red Weight: <span class="big red">{{ red_weight }}%</span></div>
-<div class="card">Net Weight: <span class="big">{{ net_weight }}</span></div>
+<div class="card">Green Stocks: <span class="big green">{{ green }} ({{ green_pct }}%)</span></div>
+<div class="card">Red Stocks: <span class="big red">{{ red }} ({{ red_pct }}%)</span></div>
+
+<div class="card">Total ₹ Plus: <span class="big green">+{{ total_rupee_plus }}</span></div>
+<div class="card">Total ₹ Minus: <span class="big red">{{ total_rupee_minus }}</span></div>
+<div class="card">Net ₹ Move: <span class="big">{{ net_rupee }}</span></div>
+
+<div class="card">Positive Impact: <span class="big green">+{{ positive_impact }}</span></div>
+<div class="card">Negative Impact: <span class="big red">{{ negative_impact }}</span></div>
+<div class="card">Net Impact: <span class="big">{{ net_impact }}</span></div>
 
 <div class="card">Call Pressure: <span class="big green">{{ call_pressure }}%</span></div>
 <div class="card">Put Pressure: <span class="big red">{{ put_pressure }}%</span></div>
-<div class="card">Option Risk: <span class="big">{{ option_risk }}</span></div>
 <div class="card">Entry Advice: <span class="big">{{ entry_advice }}</span></div>
 
 <div class="card">
-<h3>Weightage Bucket Summary</h3>
-<table>
-<tr><th>Bucket</th><th>Green</th><th>Red</th><th>Green Wt</th><th>Red Wt</th><th>Net</th></tr>
-{{ bucket_rows }}
-</table>
+<h3>Top 10 Pullers</h3>
+<table><tr><th>Stock</th><th>Price</th><th>₹ Chg</th><th>%</th><th>Wt</th><th>Impact</th></tr>{{ pullers }}</table>
 </div>
 
 <div class="card">
-<h3>Top Pullers / Draggers</h3>
-<table><tr><th>Stock</th><th>Wt</th><th>% Chg</th><th>Impact</th></tr>{{ contributor_rows }}</table>
+<h3>Top 10 Draggers</h3>
+<table><tr><th>Stock</th><th>Price</th><th>₹ Chg</th><th>%</th><th>Wt</th><th>Impact</th></tr>{{ draggers }}</table>
 </div>
 
-<div class="card"><h3>Top 5 Gainers</h3><table><tr><th>Stock</th><th>Price</th><th>%</th></tr>{{ gainers }}</table></div>
-<div class="card"><h3>Top 5 Losers</h3><table><tr><th>Stock</th><th>Price</th><th>%</th></tr>{{ losers }}</table></div>
+<div class="card">
+<h3>All 50 Stocks Live Impact</h3>
+<table><tr><th>Stock</th><th>Price</th><th>₹ Chg</th><th>%</th><th>Wt</th><th>Impact</th></tr>{{ all_rows }}</table>
+</div>
 
 <p class="small">Auto refresh 5 sec | Updated: {{ time }}</p>
 </body>
 </html>
 """
 
-def bucket_name(w):
-    if w >= 5:
-        return "5%+ Heavyweight"
-    elif w >= 2:
-        return "2% to 5%"
-    elif w >= 1:
-        return "1% to 2%"
-    return "Below 1%"
-
-def make_table(items):
+def make_rows(items):
     out = ""
     for r in items:
-        cls = "green" if r["pct"] > 0 else "red"
-        out += f"<tr><td>{r['symbol']}</td><td>{r['price']}</td><td class='{cls}'>{r['pct']}%</td></tr>"
+        cls = "green" if r["impact"] > 0 else "red"
+        rupee_cls = "green" if r["rupee"] > 0 else "red"
+        out += f"<tr><td>{r['symbol']}</td><td>{r['price']}</td><td class='{rupee_cls}'>{r['rupee']}</td><td class='{cls}'>{r['pct']}%</td><td>{r['weight']}%</td><td class='{cls}'>{r['impact']}</td></tr>"
     return Markup(out)
 
 @app.route("/")
@@ -98,106 +89,123 @@ def home():
     headers = {"Accept":"application/json","Authorization":"Bearer " + TOKEN}
 
     try:
-        nres = requests.get("https://api.upstox.com/v2/market-quote/ltp", headers=headers, params={"instrument_key":"NSE_INDEX|Nifty 50"}, timeout=10)
+        nres = requests.get("https://api.upstox.com/v2/market-quote/ltp",
+            headers=headers, params={"instrument_key":"NSE_INDEX|Nifty 50"}, timeout=10)
         nifty_price = nres.json()["data"]["NSE_INDEX:Nifty 50"]["last_price"]
     except:
         nifty_price = "Error"
 
     try:
-        res = requests.get("https://api.upstox.com/v2/market-quote/quotes", headers=headers, params={"instrument_key":",".join(stocks.values())}, timeout=15)
+        res = requests.get("https://api.upstox.com/v2/market-quote/quotes",
+            headers=headers, params={"instrument_key":",".join(stocks.values())}, timeout=15)
         data = res.json()["data"]
     except Exception as e:
         return "Upstox API Error: " + str(e)
 
     green = red = flat = 0
-    green_weight = red_weight = 0
-    rows, contributors = [], []
-
-    buckets = {
-        "5%+ Heavyweight":{"g":0,"r":0,"gw":0,"rw":0},
-        "2% to 5%":{"g":0,"r":0,"gw":0,"rw":0},
-        "1% to 2%":{"g":0,"r":0,"gw":0,"rw":0},
-        "Below 1%":{"g":0,"r":0,"gw":0,"rw":0}
-    }
+    total_rupee_plus = 0
+    total_rupee_minus = 0
+    positive_impact = 0
+    negative_impact = 0
+    rows = []
 
     for s in data.values():
         symbol = s.get("symbol","")
-        price = s.get("last_price",0)
+        price = round(s.get("last_price",0),2)
         close = s.get("ohlc",{}).get("close",0)
-        change = s.get("net_change",0)
-        pct = round((change / close) * 100, 2) if close else 0
+        rupee = round(s.get("net_change",0),2)
+        pct = round((rupee / close) * 100, 2) if close else 0
         wt = weights.get(symbol,0)
-        b = bucket_name(wt)
+        impact = round(wt * pct, 2)
 
-        if change > 0:
+        if rupee > 0:
             green += 1
-            green_weight += wt
-            buckets[b]["g"] += 1
-            buckets[b]["gw"] += wt
-        elif change < 0:
+            total_rupee_plus += rupee
+            positive_impact += impact
+        elif rupee < 0:
             red += 1
-            red_weight += wt
-            buckets[b]["r"] += 1
-            buckets[b]["rw"] += wt
+            total_rupee_minus += rupee
+            negative_impact += impact
         else:
             flat += 1
 
-        impact = round(wt * pct, 2)
-        contributors.append({"symbol":symbol,"weight":wt,"pct":pct,"impact":impact})
-        rows.append({"symbol":symbol,"price":price,"pct":pct})
+        rows.append({
+            "symbol":symbol,"price":price,"rupee":rupee,
+            "pct":pct,"weight":wt,"impact":impact
+        })
 
     total = green + red + flat
-    green_pct = round(green * 100 / total, 1) if total else 0
-    red_pct = round(red * 100 / total, 1) if total else 0
+    green_pct = round(green * 100 / total,1) if total else 0
+    red_pct = round(red * 100 / total,1) if total else 0
 
-    green_weight = round(green_weight,2)
-    red_weight = round(red_weight,2)
-    net_weight = round(green_weight - red_weight,2)
+    total_rupee_plus = round(total_rupee_plus,2)
+    total_rupee_minus = round(total_rupee_minus,2)
+    net_rupee = round(total_rupee_plus + total_rupee_minus,2)
 
-    call_pressure = round((green_pct * 0.35) + ((50 + net_weight) * 0.65),1)
-    put_pressure = round((red_pct * 0.35) + ((50 - net_weight) * 0.65),1)
-    call_pressure = max(0, min(100, call_pressure))
-    put_pressure = max(0, min(100, put_pressure))
+    positive_impact = round(positive_impact,2)
+    negative_impact = round(negative_impact,2)
+    net_impact = round(positive_impact + negative_impact,2)
 
-    if green_weight > red_weight and red > green:
-        pull_direction = "Heavyweights pulling market UP"
-        reason = "Stocks red વધારે છે, પણ green weight વધારે છે."
-    elif red_weight > green_weight and green > red:
-        pull_direction = "Heavyweights pulling market DOWN"
-        reason = "Stocks green વધારે છે, પણ red weight વધારે છે."
-    elif green_weight > red_weight:
-        pull_direction = "Weight bullish"
-        reason = "Green side weight વધારે છે."
-    elif red_weight > green_weight:
-        pull_direction = "Weight bearish"
-        reason = "Red side weight વધારે છે."
+    call_pressure = max(0, min(100, round(50 + net_impact,1)))
+    put_pressure = max(0, min(100, round(50 - net_impact,1)))
+
+    if net_impact >= 8:
+        final_decision = "CALL BUY FAVOURABLE"
+        direction = "CALL SIDE STRONG"
+        entry_advice = "Call only after breakout confirmation"
+        color = "#d9fbe6"
+        reason = "Weighted positive impact strong છે."
+    elif net_impact <= -8:
+        final_decision = "PUT BUY FAVOURABLE"
+        direction = "PUT SIDE STRONG"
+        entry_advice = "Put only after breakdown confirmation"
+        color = "#ffe1e1"
+        reason = "Weighted negative impact strong છે."
+    elif net_impact > 2:
+        final_decision = "CALL SIDE WATCH"
+        direction = "MILD BULLISH"
+        entry_advice = "Wait for breakout"
+        color = "#fff3cd"
+        reason = "Positive impact છે, પણ strong નથી."
+    elif net_impact < -2:
+        final_decision = "PUT SIDE WATCH"
+        direction = "MILD BEARISH"
+        entry_advice = "Wait for breakdown"
+        color = "#fff3cd"
+        reason = "Negative impact છે, પણ strong નથી."
     else:
-        pull_direction = "Balanced"
-        reason = "Green અને red weight નજીક છે."
+        final_decision = "NO TRADE"
+        direction = "CHOPPY / SIDEWAYS"
+        entry_advice = "Avoid option buying"
+        color = "#fff3cd"
+        reason = "Net impact weak છે."
 
-    if call_pressure >= 75 and green_weight > red_weight:
-        final_decision, entry_advice, option_risk, color = "CALL BUY FAVOURABLE", "Only after breakout confirmation", "LOW", "#d9fbe6"
-    elif put_pressure >= 75 and red_weight > green_weight:
-        final_decision, entry_advice, option_risk, color = "PUT BUY FAVOURABLE", "Only after breakdown confirmation", "LOW", "#ffe1e1"
-    elif green_weight > red_weight:
-        final_decision, entry_advice, option_risk, color = "CALL SIDE WATCH", "Wait for breakout", "MEDIUM", "#fff3cd"
-    elif red_weight > green_weight:
-        final_decision, entry_advice, option_risk, color = "PUT SIDE WATCH", "Wait for breakdown", "MEDIUM", "#fff3cd"
-    else:
-        final_decision, entry_advice, option_risk, color = "NO TRADE", "Avoid option buying", "HIGH", "#fff3cd"
+    pullers = sorted([r for r in rows if r["impact"] > 0], key=lambda x: x["impact"], reverse=True)[:10]
+    draggers = sorted([r for r in rows if r["impact"] < 0], key=lambda x: x["impact"])[:10]
+    all_sorted = sorted(rows, key=lambda x: x["impact"], reverse=True)
 
-    bucket_html = ""
-    for name, b in buckets.items():
-        net = round(b["gw"] - b["rw"],2)
-        bucket_html += f"<tr><td>{name}</td><td class='green'>{b['g']}</td><td class='red'>{b['r']}</td><td class='green'>{round(b['gw'],2)}%</td><td class='red'>{round(b['rw'],2)}%</td><td>{net}</td></tr>"
-
-    top_contributors = sorted(contributors, key=lambda x: abs(x["impact"]), reverse=True)[:10]
-    contributor_html = ""
-    for c in top_contributors:
-        cls = "green" if c["impact"] > 0 else "red"
-        contributor_html += f"<tr><td>{c['symbol']}</td><td>{c['weight']}%</td><td>{c['pct']}%</td><td class='{cls}'>{c['impact']}</td></tr>"
-
-    gainers = sorted(rows, key=lambda x: x["pct"], reverse=True)[:5]
-    losers = sorted(rows, key=lambda x: x["pct"])[:5]
-
-    return render_template_string(HTML, nifty_price=nifty_price, final_decision=final_decision, color=color, pull_direction=pull_direction, reason=reason, green=green, red=red, green_pct=green_pct, red_pct=red_pct, green_weight=green_weight, red_weight=red_weight, net_weight=net_weight, call_pressure=call_pressure, put_pressure=put_pressure, option_risk=option_risk, entry_advice=entry_advice, bucket_rows=Markup(bucket_html), contributor_rows=Markup(contributor_html), gainers=make_table(gainers), losers=make_table(losers), time=datetime.now().strftime("%d-%m-%Y %H:%M:%S"))
+    return render_template_string(
+        HTML,
+        nifty_price=nifty_price,
+        final_decision=final_decision,
+        color=color,
+        direction=direction,
+        reason=reason,
+        green=green,
+        red=red,
+        green_pct=green_pct,
+        red_pct=red_pct,
+        total_rupee_plus=total_rupee_plus,
+        total_rupee_minus=total_rupee_minus,
+        net_rupee=net_rupee,
+        positive_impact=positive_impact,
+        negative_impact=negative_impact,
+        net_impact=net_impact,
+        call_pressure=call_pressure,
+        put_pressure=put_pressure,
+        entry_advice=entry_advice,
+        pullers=make_rows(pullers),
+        draggers=make_rows(draggers),
+        all_rows=make_rows(all_sorted),
+        time=datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+        )
