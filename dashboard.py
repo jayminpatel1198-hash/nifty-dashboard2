@@ -19,7 +19,7 @@ HTML = """
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="refresh" content="5">
-<title>Nifty Meter Dashboard V10</title>
+<title>Nifty Meter Dashboard V11</title>
 <style>
 body{font-family:Arial;background:#f4f6f8;padding:12px;margin:0}
 h2{text-align:center}
@@ -30,89 +30,67 @@ h2{text-align:center}
 table{width:100%;border-collapse:collapse;font-size:13px}
 td,th{padding:7px;border-bottom:1px solid #ddd;text-align:left}
 .small{text-align:center;color:#555}
-
 .meterbox{text-align:center}
-.meter{
-  width:210px;height:210px;border-radius:50%;margin:10px auto;
-  background:conic-gradient(#d93025 0deg 162deg,#fbbc04 162deg 198deg,#0a9f45 198deg 360deg);
-  position:relative;
-}
-.meter:after{
-  content:"";position:absolute;left:25px;top:25px;width:160px;height:160px;
-  background:white;border-radius:50%;
-}
-.needle{
-  position:absolute;left:101px;top:22px;width:8px;height:88px;background:#111;
-  transform-origin:4px 83px;border-radius:4px;z-index:2;
-}
-.center{
-  position:absolute;left:85px;top:85px;width:40px;height:40px;background:#111;border-radius:50%;z-index:3;
-}
-.score{
-  position:absolute;left:0;right:0;top:122px;text-align:center;font-size:28px;font-weight:bold;z-index:4;
-}
+.gauge{width:280px;height:170px;margin:15px auto;position:relative;overflow:hidden}
+.gauge:before{content:"";position:absolute;left:20px;top:20px;width:240px;height:240px;border-radius:50%;background:conic-gradient(from 270deg,#d93025 0deg 80deg,#fbbc04 80deg 100deg,#0a9f45 100deg 180deg,transparent 180deg 360deg)}
+.gauge:after{content:"";position:absolute;left:60px;top:60px;width:160px;height:160px;background:white;border-radius:50%}
+.needle{position:absolute;left:138px;top:130px;width:5px;height:105px;background:#111;transform-origin:2.5px 2.5px;z-index:3;border-radius:5px}
+.center{position:absolute;left:126px;top:118px;width:29px;height:29px;background:#111;border-radius:50%;z-index:4}
+.score{position:absolute;left:0;right:0;top:98px;text-align:center;font-size:31px;font-weight:bold;z-index:5}
+.tick{position:absolute;font-size:13px;font-weight:bold;z-index:6}
+.t10{left:18px;top:126px}.t20{left:30px;top:88px}.t30{left:58px;top:54px}.t40{left:96px;top:31px}.t50{left:132px;top:22px}
+.t60{left:172px;top:31px}.t70{left:207px;top:54px}.t80{left:235px;top:88px}.t90{left:247px;top:126px}.t100{left:230px;top:148px}
 .labels{display:flex;justify-content:space-between;font-size:13px;margin:0 18px}
 </style>
 </head>
 <body>
 
-<h2>NIFTY METER DASHBOARD V10</h2>
+<h2>NIFTY METER DASHBOARD V11</h2>
 
 <div class="card">Nifty 50 Live: <span class="big">{{ nifty_price }}</span></div>
 <div class="signal" style="background:{{ color }}">{{ final_decision }}</div>
 
 <div class="card meterbox">
 <h3>Weightage Impact Meter</h3>
-<div class="meter">
+<div class="gauge">
+  <div class="tick t10">10</div><div class="tick t20">20</div><div class="tick t30">30</div><div class="tick t40">40</div><div class="tick t50">50</div>
+  <div class="tick t60">60</div><div class="tick t70">70</div><div class="tick t80">80</div><div class="tick t90">90</div><div class="tick t100">100</div>
   <div class="needle" style="transform:rotate({{ weight_angle }}deg)"></div>
   <div class="center"></div>
   <div class="score">{{ weight_meter }}</div>
 </div>
-<div class="labels"><span>0 Bearish</span><span>50 Neutral</span><span>100 Bullish</span></div>
+<div class="labels"><span>Bearish</span><span>50 Neutral</span><span>Bullish</span></div>
 </div>
 
 <div class="card meterbox">
 <h3>Price / ₹ Movement Meter</h3>
-<div class="meter">
+<div class="gauge">
+  <div class="tick t10">10</div><div class="tick t20">20</div><div class="tick t30">30</div><div class="tick t40">40</div><div class="tick t50">50</div>
+  <div class="tick t60">60</div><div class="tick t70">70</div><div class="tick t80">80</div><div class="tick t90">90</div><div class="tick t100">100</div>
   <div class="needle" style="transform:rotate({{ price_angle }}deg)"></div>
   <div class="center"></div>
   <div class="score">{{ price_meter }}</div>
 </div>
-<div class="labels"><span>0 Bearish</span><span>50 Neutral</span><span>100 Bullish</span></div>
+<div class="labels"><span>Bearish</span><span>50 Neutral</span><span>Bullish</span></div>
 </div>
 
 <div class="card">Direction: <span class="big">{{ direction }}</span></div>
 <div class="card">Reason: <span class="big">{{ reason }}</span></div>
-
 <div class="card">Green Stocks: <span class="big green">{{ green }} ({{ green_pct }}%)</span></div>
 <div class="card">Red Stocks: <span class="big red">{{ red }} ({{ red_pct }}%)</span></div>
-
 <div class="card">Total ₹ Plus: <span class="big green">+{{ total_rupee_plus }}</span></div>
 <div class="card">Total ₹ Minus: <span class="big red">{{ total_rupee_minus }}</span></div>
 <div class="card">Net ₹ Move: <span class="big">{{ net_rupee }}</span></div>
-
 <div class="card">Positive Impact: <span class="big green">+{{ positive_impact }}</span></div>
 <div class="card">Negative Impact: <span class="big red">{{ negative_impact }}</span></div>
 <div class="card">Net Impact: <span class="big">{{ net_impact }}</span></div>
-
 <div class="card">Call Pressure: <span class="big green">{{ call_pressure }}%</span></div>
 <div class="card">Put Pressure: <span class="big red">{{ put_pressure }}%</span></div>
 <div class="card">Entry Advice: <span class="big">{{ entry_advice }}</span></div>
 
-<div class="card">
-<h3>Top 10 Pullers</h3>
-<table><tr><th>Stock</th><th>Price</th><th>₹ Chg</th><th>%</th><th>Wt</th><th>Impact</th></tr>{{ pullers }}</table>
-</div>
-
-<div class="card">
-<h3>Top 10 Draggers</h3>
-<table><tr><th>Stock</th><th>Price</th><th>₹ Chg</th><th>%</th><th>Wt</th><th>Impact</th></tr>{{ draggers }}</table>
-</div>
-
-<div class="card">
-<h3>All 50 Stocks Live Impact</h3>
-<table><tr><th>Stock</th><th>Price</th><th>₹ Chg</th><th>%</th><th>Wt</th><th>Impact</th></tr>{{ all_rows }}</table>
-</div>
+<div class="card"><h3>Top 10 Pullers</h3><table><tr><th>Stock</th><th>Price</th><th>₹ Chg</th><th>%</th><th>Wt</th><th>Impact</th></tr>{{ pullers }}</table></div>
+<div class="card"><h3>Top 10 Draggers</h3><table><tr><th>Stock</th><th>Price</th><th>₹ Chg</th><th>%</th><th>Wt</th><th>Impact</th></tr>{{ draggers }}</table></div>
+<div class="card"><h3>All 50 Stocks Live Impact</h3><table><tr><th>Stock</th><th>Price</th><th>₹ Chg</th><th>%</th><th>Wt</th><th>Impact</th></tr>{{ all_rows }}</table></div>
 
 <p class="small">Auto refresh 5 sec | Updated: {{ time }}</p>
 </body>
@@ -135,15 +113,13 @@ def home():
     headers = {"Accept":"application/json","Authorization":"Bearer " + TOKEN}
 
     try:
-        nres = requests.get("https://api.upstox.com/v2/market-quote/ltp",
-            headers=headers, params={"instrument_key":"NSE_INDEX|Nifty 50"}, timeout=10)
+        nres = requests.get("https://api.upstox.com/v2/market-quote/ltp", headers=headers, params={"instrument_key":"NSE_INDEX|Nifty 50"}, timeout=10)
         nifty_price = nres.json()["data"]["NSE_INDEX:Nifty 50"]["last_price"]
     except:
         nifty_price = "Error"
 
     try:
-        res = requests.get("https://api.upstox.com/v2/market-quote/quotes",
-            headers=headers, params={"instrument_key":",".join(stocks.values())}, timeout=15)
+        res = requests.get("https://api.upstox.com/v2/market-quote/quotes", headers=headers, params={"instrument_key":",".join(stocks.values())}, timeout=15)
         data = res.json()["data"]
     except Exception as e:
         return "Upstox API Error: " + str(e)
@@ -190,41 +166,26 @@ def home():
     net_impact = round(positive_impact + negative_impact,2)
 
     impact_total = positive_impact + abs(negative_impact)
-    if impact_total > 0:
-        weight_meter = round((positive_impact / impact_total) * 100, 1)
-    else:
-        weight_meter = 50
+    weight_meter = round((positive_impact / impact_total) * 100, 1) if impact_total > 0 else 50
 
     rupee_total = total_rupee_plus + abs(total_rupee_minus)
-    if rupee_total > 0:
-        price_meter = round((total_rupee_plus / rupee_total) * 100, 1)
-    else:
-        price_meter = 50
+    price_meter = round((total_rupee_plus / rupee_total) * 100, 1) if rupee_total > 0 else 50
 
-    weight_angle = round((weight_meter * 3.6), 1)
-    price_angle = round((price_meter * 3.6), 1)
+    weight_angle = round(-90 + (weight_meter * 1.8), 1)
+    price_angle = round(-90 + (price_meter * 1.8), 1)
 
     call_pressure = weight_meter
     put_pressure = round(100 - weight_meter, 1)
 
     if weight_meter >= 65:
-        final_decision = "CALL SIDE BULLISH"
-        direction = "BULLISH"
-        entry_advice = "Call only after breakout confirmation"
-        color = "#d9fbe6"
-        reason = "Weightage impact meter 50 ઉપર છે."
+        final_decision, direction, entry_advice, color = "CALL SIDE BULLISH", "BULLISH", "Call only after breakout confirmation", "#d9fbe6"
+        reason = "Weightage meter 50 ઉપર છે અને bullish pressure વધારે છે."
     elif weight_meter <= 35:
-        final_decision = "PUT SIDE BEARISH"
-        direction = "BEARISH"
-        entry_advice = "Put only after breakdown confirmation"
-        color = "#ffe1e1"
-        reason = "Weightage impact meter 50 નીચે છે."
+        final_decision, direction, entry_advice, color = "PUT SIDE BEARISH", "BEARISH", "Put only after breakdown confirmation", "#ffe1e1"
+        reason = "Weightage meter 50 નીચે છે અને bearish pressure વધારે છે."
     else:
-        final_decision = "NO TRADE / SIDEWAYS"
-        direction = "CHOPPY"
-        entry_advice = "Avoid option buying"
-        color = "#fff3cd"
-        reason = "Meter 35 થી 65 વચ્ચે છે."
+        final_decision, direction, entry_advice, color = "NO TRADE / SIDEWAYS", "CHOPPY", "Avoid option buying", "#fff3cd"
+        reason = "Meter 35 થી 65 વચ્ચે છે એટલે clear trend નથી."
 
     pullers = sorted([r for r in rows if r["impact"] > 0], key=lambda x: x["impact"], reverse=True)[:10]
     draggers = sorted([r for r in rows if r["impact"] < 0], key=lambda x: x["impact"])[:10]
@@ -232,30 +193,12 @@ def home():
 
     return render_template_string(
         HTML,
-        nifty_price=nifty_price,
-        final_decision=final_decision,
-        color=color,
-        weight_meter=weight_meter,
-        price_meter=price_meter,
-        weight_angle=weight_angle,
-        price_angle=price_angle,
-        direction=direction,
-        reason=reason,
-        green=green,
-        red=red,
-        green_pct=green_pct,
-        red_pct=red_pct,
-        total_rupee_plus=total_rupee_plus,
-        total_rupee_minus=total_rupee_minus,
-        net_rupee=net_rupee,
-        positive_impact=positive_impact,
-        negative_impact=negative_impact,
-        net_impact=net_impact,
-        call_pressure=call_pressure,
-        put_pressure=put_pressure,
-        entry_advice=entry_advice,
-        pullers=make_rows(pullers),
-        draggers=make_rows(draggers),
-        all_rows=make_rows(all_sorted),
+        nifty_price=nifty_price, final_decision=final_decision, color=color,
+        weight_meter=weight_meter, price_meter=price_meter, weight_angle=weight_angle, price_angle=price_angle,
+        direction=direction, reason=reason, green=green, red=red, green_pct=green_pct, red_pct=red_pct,
+        total_rupee_plus=total_rupee_plus, total_rupee_minus=total_rupee_minus, net_rupee=net_rupee,
+        positive_impact=positive_impact, negative_impact=negative_impact, net_impact=net_impact,
+        call_pressure=call_pressure, put_pressure=put_pressure, entry_advice=entry_advice,
+        pullers=make_rows(pullers), draggers=make_rows(draggers), all_rows=make_rows(all_sorted),
         time=datetime.now().strftime("%d-%m-%Y %H:%M:%S")
-        )
+    )
