@@ -1,4 +1,4 @@
-from flask import Flask, render_template_string
+from flask import Flask, render_template_string, request
 from markupsafe import Markup
 import requests, os
 from datetime import datetime
@@ -6,34 +6,61 @@ from datetime import datetime
 app = Flask(__name__)
 TOKEN = os.environ.get("UPSTOX_TOKEN")
 
-stocks = {
-"HDFCBANK":"NSE_EQ|INE040A01034","RELIANCE":"NSE_EQ|INE002A01018","ICICIBANK":"NSE_EQ|INE090A01021","BHARTIARTL":"NSE_EQ|INE397D01024","LT":"NSE_EQ|INE018A01030","SBIN":"NSE_EQ|INE062A01020","INFY":"NSE_EQ|INE009A01021","AXISBANK":"NSE_EQ|INE238A01034","ITC":"NSE_EQ|INE154A01025","KOTAKBANK":"NSE_EQ|INE237A01036","M&M":"NSE_EQ|INE101A01026","TCS":"NSE_EQ|INE467B01029","BAJFINANCE":"NSE_EQ|INE296A01032","HINDUNILVR":"NSE_EQ|INE030A01027","SUNPHARMA":"NSE_EQ|INE044A01036","NTPC":"NSE_EQ|INE733E01010","TITAN":"NSE_EQ|INE280A01028","ETERNAL":"NSE_EQ|INE758T01015","TATASTEEL":"NSE_EQ|INE081A01020","MARUTI":"NSE_EQ|INE585B01010","BEL":"NSE_EQ|INE263A01024","HINDALCO":"NSE_EQ|INE038A01020","POWERGRID":"NSE_EQ|INE752E01010","ULTRACEMCO":"NSE_EQ|INE481G01011","SHRIRAMFIN":"NSE_EQ|INE721A01047","HCLTECH":"NSE_EQ|INE860A01027","ADANIPORTS":"NSE_EQ|INE742F01042","JSWSTEEL":"NSE_EQ|INE019A01038","ONGC":"NSE_EQ|INE213A01029","BAJAJ-AUTO":"NSE_EQ|INE917I01010","ASIANPAINT":"NSE_EQ|INE021A01026","COALINDIA":"NSE_EQ|INE522F01014","GRASIM":"NSE_EQ|INE047A01021","NESTLEIND":"NSE_EQ|INE239A01024","BAJAJFINSV":"NSE_EQ|INE918I01026","EICHERMOT":"NSE_EQ|INE066A01021","INDIGO":"NSE_EQ|INE646L01027","TECHM":"NSE_EQ|INE669C01036","TRENT":"NSE_EQ|INE849A01020","SBILIFE":"NSE_EQ|INE123W01016","DRREDDY":"NSE_EQ|INE089A01031","JIOFIN":"NSE_EQ|INE758E01017","APOLLOHOSP":"NSE_EQ|INE437A01024","TATACONSUM":"NSE_EQ|INE192A01025","CIPLA":"NSE_EQ|INE059A01026","MAXHEALTH":"NSE_EQ|INE027H01010","TMPV":"NSE_EQ|INE155A01022","ADANIENT":"NSE_EQ|INE423A01024","HDFCLIFE":"NSE_EQ|INE795G01014","WIPRO":"NSE_EQ|INE075A01022"
+instruments = {
+"HDFCBANK":"NSE_EQ|INE040A01034","RELIANCE":"NSE_EQ|INE002A01018","ICICIBANK":"NSE_EQ|INE090A01021","BHARTIARTL":"NSE_EQ|INE397D01024",
+"LT":"NSE_EQ|INE018A01030","SBIN":"NSE_EQ|INE062A01020","INFY":"NSE_EQ|INE009A01021","AXISBANK":"NSE_EQ|INE238A01034",
+"ITC":"NSE_EQ|INE154A01025","KOTAKBANK":"NSE_EQ|INE237A01036","M&M":"NSE_EQ|INE101A01026","TCS":"NSE_EQ|INE467B01029",
+"BAJFINANCE":"NSE_EQ|INE296A01032","HINDUNILVR":"NSE_EQ|INE030A01027","SUNPHARMA":"NSE_EQ|INE044A01036","NTPC":"NSE_EQ|INE733E01010",
+"TITAN":"NSE_EQ|INE280A01028","ETERNAL":"NSE_EQ|INE758T01015","TATASTEEL":"NSE_EQ|INE081A01020","MARUTI":"NSE_EQ|INE585B01010",
+"BEL":"NSE_EQ|INE263A01024","HINDALCO":"NSE_EQ|INE038A01020","POWERGRID":"NSE_EQ|INE752E01010","ULTRACEMCO":"NSE_EQ|INE481G01011",
+"SHRIRAMFIN":"NSE_EQ|INE721A01047","HCLTECH":"NSE_EQ|INE860A01027","ADANIPORTS":"NSE_EQ|INE742F01042","JSWSTEEL":"NSE_EQ|INE019A01038",
+"ONGC":"NSE_EQ|INE213A01029","BAJAJ-AUTO":"NSE_EQ|INE917I01010","ASIANPAINT":"NSE_EQ|INE021A01026","COALINDIA":"NSE_EQ|INE522F01014",
+"GRASIM":"NSE_EQ|INE047A01021","NESTLEIND":"NSE_EQ|INE239A01024","BAJAJFINSV":"NSE_EQ|INE918I01026","EICHERMOT":"NSE_EQ|INE066A01021",
+"INDIGO":"NSE_EQ|INE646L01027","TECHM":"NSE_EQ|INE669C01036","TRENT":"NSE_EQ|INE849A01020","SBILIFE":"NSE_EQ|INE123W01016",
+"DRREDDY":"NSE_EQ|INE089A01031","JIOFIN":"NSE_EQ|INE758E01017","APOLLOHOSP":"NSE_EQ|INE437A01024","TATACONSUM":"NSE_EQ|INE192A01025",
+"CIPLA":"NSE_EQ|INE059A01026","MAXHEALTH":"NSE_EQ|INE027H01010","TMPV":"NSE_EQ|INE155A01022","ADANIENT":"NSE_EQ|INE423A01024",
+"HDFCLIFE":"NSE_EQ|INE795G01014","WIPRO":"NSE_EQ|INE075A01022","INDUSINDBK":"NSE_EQ|INE095A01012",
+"BANKBARODA":"NSE_EQ|INE028A01039","PNB":"NSE_EQ|INE160A01022","CANBK":"NSE_EQ|INE476A01014","FEDERALBNK":"NSE_EQ|INE171A01029",
+"IDFCFIRSTB":"NSE_EQ|INE092T01019","AUBANK":"NSE_EQ|INE949L01017"
 }
 
-weights = {
-"HDFCBANK":10.73,"RELIANCE":8.78,"ICICIBANK":8.21,"BHARTIARTL":5.26,"LT":4.28,"SBIN":4.03,"INFY":3.76,"AXISBANK":3.31,"ITC":2.76,"KOTAKBANK":2.56,"M&M":2.51,"TCS":2.30,"BAJFINANCE":2.28,"HINDUNILVR":1.81,"SUNPHARMA":1.74,"NTPC":1.72,"TITAN":1.64,"ETERNAL":1.62,"TATASTEEL":1.59,"MARUTI":1.59,"BEL":1.40,"HINDALCO":1.37,"POWERGRID":1.31,"ULTRACEMCO":1.25,"SHRIRAMFIN":1.19,"HCLTECH":1.15,"ADANIPORTS":1.11,"JSWSTEEL":1.08,"ONGC":1.06,"BAJAJ-AUTO":1.01,"ASIANPAINT":1.00,"COALINDIA":0.99,"GRASIM":0.97,"NESTLEIND":0.95,"BAJAJFINSV":0.92,"EICHERMOT":0.89,"INDIGO":0.88,"TECHM":0.85,"TRENT":0.84,"SBILIFE":0.74,"DRREDDY":0.73,"JIOFIN":0.73,"APOLLOHOSP":0.71,"TATACONSUM":0.68,"CIPLA":0.67,"MAXHEALTH":0.67,"TMPV":0.65,"ADANIENT":0.63,"HDFCLIFE":0.57,"WIPRO":0.52
+nifty_weights = {
+"HDFCBANK":10.73,"RELIANCE":8.78,"ICICIBANK":8.21,"BHARTIARTL":5.26,"LT":4.28,"SBIN":4.03,"INFY":3.76,"AXISBANK":3.31,
+"ITC":2.76,"KOTAKBANK":2.56,"M&M":2.51,"TCS":2.30,"BAJFINANCE":2.28,"HINDUNILVR":1.81,"SUNPHARMA":1.74,"NTPC":1.72,
+"TITAN":1.64,"ETERNAL":1.62,"TATASTEEL":1.59,"MARUTI":1.59,"BEL":1.40,"HINDALCO":1.37,"POWERGRID":1.31,"ULTRACEMCO":1.25,
+"SHRIRAMFIN":1.19,"HCLTECH":1.15,"ADANIPORTS":1.11,"JSWSTEEL":1.08,"ONGC":1.06,"BAJAJ-AUTO":1.01,"ASIANPAINT":1.00,
+"COALINDIA":0.99,"GRASIM":0.97,"NESTLEIND":0.95,"BAJAJFINSV":0.92,"EICHERMOT":0.89,"INDIGO":0.88,"TECHM":0.85,"TRENT":0.84,
+"SBILIFE":0.74,"DRREDDY":0.73,"JIOFIN":0.73,"APOLLOHOSP":0.71,"TATACONSUM":0.68,"CIPLA":0.67,"MAXHEALTH":0.67,"TMPV":0.65,
+"ADANIENT":0.63,"HDFCLIFE":0.57,"WIPRO":0.52
+}
+
+banknifty_weights = {
+"HDFCBANK":28,"ICICIBANK":24,"SBIN":11,"KOTAKBANK":10,"AXISBANK":9,"INDUSINDBK":5,
+"BANKBARODA":4,"PNB":3,"CANBK":2.5,"FEDERALBNK":1.5,"IDFCFIRSTB":1,"AUBANK":1
+}
+
+configs = {
+"NIFTY": {"title":"NIFTY 50","index_key":"NSE_INDEX|Nifty 50","tv_symbol":"NSE:NIFTY","weights":nifty_weights,"analysis":True},
+"BANKNIFTY": {"title":"BANKNIFTY","index_key":"NSE_INDEX|Nifty Bank","tv_symbol":"NSE:BANKNIFTY","weights":banknifty_weights,"analysis":True},
+"SENSEX": {"title":"SENSEX","index_key":"BSE_INDEX|SENSEX","tv_symbol":"BSE:SENSEX","weights":{},"analysis":False}
 }
 
 HTML = """
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="refresh" content="60">
-<title>Nifty V15 Dashboard</title>
+<title>{{ title }} V17 Dashboard</title>
 <style>
 body{font-family:Arial;background:#f4f6f8;padding:12px;margin:0}
-h2{text-align:center}
-.card{background:white;padding:14px;margin:8px;border-radius:14px;box-shadow:0 2px 5px #ddd}
+h2{text-align:center}.card{background:white;padding:14px;margin:8px;border-radius:14px;box-shadow:0 2px 5px #ddd}
 .signal{padding:18px;border-radius:16px;text-align:center;font-size:23px;font-weight:bold;margin:8px}
-.big{font-size:23px;font-weight:bold}
-.green{color:green;font-weight:bold}.red{color:red;font-weight:bold}
-table{width:100%;border-collapse:collapse;font-size:13px}
-td,th{padding:7px;border-bottom:1px solid #ddd;text-align:left}
-.small{text-align:center;color:#555}
-.tvbox{height:650px}
-@media (orientation: landscape){.tvbox{height:520px}}
-.meterbox{text-align:center}
-.gauge{width:280px;height:170px;margin:15px auto;position:relative;overflow:hidden}
+.big{font-size:23px;font-weight:bold}.green{color:green;font-weight:bold}.red{color:red;font-weight:bold}
+table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:7px;border-bottom:1px solid #ddd;text-align:left}
+select{font-size:18px;padding:10px;border-radius:10px;width:100%}.small{text-align:center;color:#555}
+input{padding:10px;border-radius:8px;border:1px solid #ccc;width:38%;margin:3px}
+button{padding:10px;border-radius:8px;border:0;margin:3px;font-weight:bold}
+.tvbox{height:650px}@media (orientation:landscape){.tvbox{height:520px}}
+.meterbox{text-align:center}.gauge{width:280px;height:170px;margin:15px auto;position:relative;overflow:hidden}
 .gauge:before{content:"";position:absolute;left:20px;top:20px;width:240px;height:240px;border-radius:50%;background:conic-gradient(from 270deg,#d93025 0deg 80deg,#fbbc04 80deg 100deg,#0a9f45 100deg 180deg,transparent 180deg 360deg)}
 .gauge:after{content:"";position:absolute;left:60px;top:60px;width:160px;height:160px;background:white;border-radius:50%}
 .needle{position:absolute;left:138px;top:130px;width:5px;height:105px;background:#111;transform-origin:2.5px 2.5px;z-index:3;border-radius:5px}
@@ -47,27 +74,47 @@ td,th{padding:7px;border-bottom:1px solid #ddd;text-align:left}
 </head>
 <body>
 
-<h2>NIFTY V15: METER + TRADINGVIEW CHART</h2>
+<h2>{{ title }} V17 DASHBOARD</h2>
 
-<div class="card">Nifty 50 Live: <span class="big">{{ nifty_price }}</span></div>
+<div class="card">
+<select onchange="changeIndex(this.value)">
+<option value="NIFTY" {% if selected=="NIFTY" %}selected{% endif %}>NIFTY 50</option>
+<option value="BANKNIFTY" {% if selected=="BANKNIFTY" %}selected{% endif %}>BANKNIFTY</option>
+<option value="SENSEX" {% if selected=="SENSEX" %}selected{% endif %}>SENSEX</option>
+</select>
+</div>
+
+<div class="card">{{ title }} Live: <span class="big">{{ index_price }}</span></div>
 <div class="signal" style="background:{{ color }}">{{ final_decision }}</div>
 
 <div class="card">
-<h3>Nifty 50 TradingView Chart</h3>
+<h3>{{ title }} TradingView Chart</h3>
 <div class="tvbox" id="tv_chart"></div>
-<p class="small">Chart માં timeframe બદલો, draw tools use કરો, landscape mode માં full view મળશે.</p>
+<p class="small">TradingView drawing tools free widget માં chart ઉપર save નથી થતી. નીચે levels save થશે.</p>
 </div>
 
+<div class="card">
+<h3>Saved Support / Resistance</h3>
+<input id="supportInput" placeholder="Support price">
+<button onclick="saveSupport()">Save Support</button>
+<br>
+<input id="resistanceInput" placeholder="Resistance price">
+<button onclick="saveResistance()">Save Resistance</button>
+<br><br>
+<div>Saved Support: <span class="big green" id="savedSupport">-</span></div>
+<div>Saved Resistance: <span class="big red" id="savedResistance">-</span></div>
+<br>
+<button onclick="clearSR()">Clear Saved Levels</button>
+</div>
+
+{% if analysis %}
 <div class="card meterbox">
 <h3>Weightage Impact Meter</h3>
 <div class="gauge">
 <div class="tick t10">10</div><div class="tick t20">20</div><div class="tick t30">30</div><div class="tick t40">40</div><div class="tick t50">50</div>
 <div class="tick t60">60</div><div class="tick t70">70</div><div class="tick t80">80</div><div class="tick t90">90</div><div class="tick t100">100</div>
-<div class="needle" style="transform:rotate({{ weight_angle }}deg)"></div>
-<div class="center"></div>
-<div class="score">{{ weight_meter }}</div>
-</div>
-<div class="labels"><span>Bearish</span><span>50 Neutral</span><span>Bullish</span></div>
+<div class="needle" style="transform:rotate({{ weight_angle }}deg)"></div><div class="center"></div><div class="score">{{ weight_meter }}</div>
+</div><div class="labels"><span>Bearish</span><span>50</span><span>Bullish</span></div>
 </div>
 
 <div class="card meterbox">
@@ -75,32 +122,37 @@ td,th{padding:7px;border-bottom:1px solid #ddd;text-align:left}
 <div class="gauge">
 <div class="tick t10">10</div><div class="tick t20">20</div><div class="tick t30">30</div><div class="tick t40">40</div><div class="tick t50">50</div>
 <div class="tick t60">60</div><div class="tick t70">70</div><div class="tick t80">80</div><div class="tick t90">90</div><div class="tick t100">100</div>
-<div class="needle" style="transform:rotate({{ price_angle }}deg)"></div>
-<div class="center"></div>
-<div class="score">{{ price_meter }}</div>
-</div>
-<div class="labels"><span>Bearish</span><span>50 Neutral</span><span>Bullish</span></div>
+<div class="needle" style="transform:rotate({{ price_angle }}deg)"></div><div class="center"></div><div class="score">{{ price_meter }}</div>
+</div><div class="labels"><span>Bearish</span><span>50</span><span>Bullish</span></div>
 </div>
 
 <div class="card">Direction: <span class="big">{{ direction }}</span></div>
 <div class="card">Reason: <span class="big">{{ reason }}</span></div>
-<div class="card">Green Stocks: <span class="big green">{{ green }} ({{ green_pct }}%)</span></div>
-<div class="card">Red Stocks: <span class="big red">{{ red }} ({{ red_pct }}%)</span></div>
+<div class="card">Green: <span class="big green">{{ green }} ({{ green_pct }}%)</span></div>
+<div class="card">Red: <span class="big red">{{ red }} ({{ red_pct }}%)</span></div>
 <div class="card">Net Impact: <span class="big">{{ net_impact }}</span></div>
 <div class="card">Call Pressure: <span class="big green">{{ call_pressure }}%</span></div>
 <div class="card">Put Pressure: <span class="big red">{{ put_pressure }}%</span></div>
 <div class="card">Entry Advice: <span class="big">{{ entry_advice }}</span></div>
 
-<div class="card"><h3>Top 10 Pullers</h3><table><tr><th>Stock</th><th>Price</th><th>₹ Chg</th><th>%</th><th>Wt</th><th>Impact</th></tr>{{ pullers }}</table></div>
-<div class="card"><h3>Top 10 Draggers</h3><table><tr><th>Stock</th><th>Price</th><th>₹ Chg</th><th>%</th><th>Wt</th><th>Impact</th></tr>{{ draggers }}</table></div>
+<div class="card"><h3>Top Pullers</h3><table><tr><th>Stock</th><th>Price</th><th>₹</th><th>%</th><th>Wt</th><th>Impact</th></tr>{{ pullers }}</table></div>
+<div class="card"><h3>Top Draggers</h3><table><tr><th>Stock</th><th>Price</th><th>₹</th><th>%</th><th>Wt</th><th>Impact</th></tr>{{ draggers }}</table></div>
+{% else %}
+<div class="card">SENSEX માટે હાલમાં chart + index price + saved support/resistance છે. Meter માટે Sensex exact weights manually add કરવા પડશે.</div>
+{% endif %}
 
-<p class="small">Auto refresh dashboard 60 sec | Updated: {{ time }}</p>
+<p class="small">Updated: {{ time }}</p>
 
 <script src="https://s3.tradingview.com/tv.js"></script>
 <script>
+function changeIndex(v){
+  localStorage.setItem("selectedIndex", v);
+  window.location.href = "/?index=" + v;
+}
+
 new TradingView.widget({
   "autosize": true,
-  "symbol": "NSE:NIFTY",
+  "symbol": "{{ tv_symbol }}",
   "interval": "5",
   "timezone": "Asia/Kolkata",
   "theme": "light",
@@ -111,13 +163,35 @@ new TradingView.widget({
   "allow_symbol_change": false,
   "hide_side_toolbar": false,
   "details": true,
-  "hotlist": false,
   "calendar": false,
-  "studies": [],
   "container_id": "tv_chart"
 });
-</script>
 
+function keyBase(){ return "{{ selected }}"; }
+
+function loadSR(){
+  let sup = localStorage.getItem(keyBase() + "_support");
+  let res = localStorage.getItem(keyBase() + "_resistance");
+  document.getElementById("savedSupport").innerText = sup ? sup : "-";
+  document.getElementById("savedResistance").innerText = res ? res : "-";
+  document.getElementById("supportInput").value = sup ? sup : "";
+  document.getElementById("resistanceInput").value = res ? res : "";
+}
+function saveSupport(){
+  let val = document.getElementById("supportInput").value;
+  if(val){ localStorage.setItem(keyBase() + "_support", val); loadSR(); }
+}
+function saveResistance(){
+  let val = document.getElementById("resistanceInput").value;
+  if(val){ localStorage.setItem(keyBase() + "_resistance", val); loadSR(); }
+}
+function clearSR(){
+  localStorage.removeItem(keyBase() + "_support");
+  localStorage.removeItem(keyBase() + "_resistance");
+  loadSR();
+}
+loadSR();
+</script>
 </body>
 </html>
 """
@@ -132,26 +206,46 @@ def make_rows(items):
 
 @app.route("/")
 def home():
+    selected = request.args.get("index", "NIFTY").upper()
+    if selected not in configs:
+        selected = "NIFTY"
+
+    cfg = configs[selected]
     if not TOKEN:
-        return "UPSTOX_TOKEN missing in Render Environment"
+        return "UPSTOX_TOKEN missing"
 
     h = {"Accept":"application/json","Authorization":"Bearer " + TOKEN}
 
     try:
-        nres = requests.get("https://api.upstox.com/v2/market-quote/ltp", headers=h, params={"instrument_key":"NSE_INDEX|Nifty 50"}, timeout=10)
-        nifty_price = nres.json()["data"]["NSE_INDEX:Nifty 50"]["last_price"]
+        idx = requests.get("https://api.upstox.com/v2/market-quote/ltp", headers=h, params={"instrument_key":cfg["index_key"]}, timeout=10).json()
+        index_price = list(idx["data"].values())[0]["last_price"]
     except:
-        nifty_price = "Error"
+        index_price = "Error"
+
+    base = dict(
+        selected=selected, title=cfg["title"], tv_symbol=cfg["tv_symbol"],
+        index_price=index_price, analysis=cfg["analysis"], time=datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+    )
+
+    if not cfg["analysis"]:
+        return render_template_string(
+            HTML, **base, final_decision="CHART MODE", color="#fff3cd",
+            weight_angle=0, price_angle=0, weight_meter=50, price_meter=50,
+            direction="", reason="", green=0, red=0, green_pct=0, red_pct=0,
+            net_impact=0, call_pressure=0, put_pressure=0, entry_advice="",
+            pullers=Markup(""), draggers=Markup("")
+        )
+
+    weights = cfg["weights"]
+    keys = [instruments[s] for s in weights if s in instruments]
 
     try:
-        res = requests.get("https://api.upstox.com/v2/market-quote/quotes", headers=h, params={"instrument_key":",".join(stocks.values())}, timeout=15)
-        data = res.json()["data"]
+        data = requests.get("https://api.upstox.com/v2/market-quote/quotes", headers=h, params={"instrument_key":",".join(keys)}, timeout=15).json()["data"]
     except Exception as e:
         return "Upstox API Error: " + str(e)
 
     green = red = flat = 0
-    total_plus = total_minus = 0
-    pos_imp = neg_imp = 0
+    total_plus = total_minus = pos_imp = neg_imp = 0
     rows = []
 
     for s in data.values():
@@ -159,18 +253,14 @@ def home():
         price = round(s.get("last_price",0),2)
         close = s.get("ohlc",{}).get("close",0)
         rupee = round(s.get("net_change",0),2)
-        pct = round((rupee / close) * 100,2) if close else 0
+        pct = round((rupee/close)*100,2) if close else 0
         wt = weights.get(symbol,0)
-        impact = round(wt * pct,2)
+        impact = round(wt*pct,2)
 
         if rupee > 0:
-            green += 1
-            total_plus += rupee
-            pos_imp += impact
+            green += 1; total_plus += rupee; pos_imp += impact
         elif rupee < 0:
-            red += 1
-            total_minus += rupee
-            neg_imp += impact
+            red += 1; total_minus += rupee; neg_imp += impact
         else:
             flat += 1
 
@@ -179,7 +269,6 @@ def home():
     total = green + red + flat
     green_pct = round(green*100/total,1) if total else 0
     red_pct = round(red*100/total,1) if total else 0
-
     pos_imp = round(pos_imp,2)
     neg_imp = round(neg_imp,2)
     net_impact = round(pos_imp + neg_imp,2)
@@ -192,15 +281,14 @@ def home():
 
     weight_angle = round(-90 + weight_meter*1.8,1)
     price_angle = round(-90 + price_meter*1.8,1)
-
     call_pressure = weight_meter
     put_pressure = round(100-weight_meter,1)
 
     if weight_meter >= 65:
-        final_decision, direction, entry_advice, color = "CALL SIDE BULLISH", "BULLISH", "Call only after breakout confirmation", "#d9fbe6"
+        final_decision, direction, entry_advice, color = "CALL SIDE BULLISH", "BULLISH", "Call after breakout only", "#d9fbe6"
         reason = "Weightage meter 50 ઉપર છે."
     elif weight_meter <= 35:
-        final_decision, direction, entry_advice, color = "PUT SIDE BEARISH", "BEARISH", "Put only after breakdown confirmation", "#ffe1e1"
+        final_decision, direction, entry_advice, color = "PUT SIDE BEARISH", "BEARISH", "Put after breakdown only", "#ffe1e1"
         reason = "Weightage meter 50 નીચે છે."
     else:
         final_decision, direction, entry_advice, color = "NO TRADE / SIDEWAYS", "CHOPPY", "Avoid option buying", "#fff3cd"
@@ -210,25 +298,13 @@ def home():
     draggers = sorted([r for r in rows if r["impact"] < 0], key=lambda x:x["impact"])[:10]
 
     return render_template_string(
-        HTML,
-        nifty_price=nifty_price,
-        final_decision=final_decision,
-        color=color,
-        weight_meter=weight_meter,
-        price_meter=price_meter,
-        weight_angle=weight_angle,
-        price_angle=price_angle,
-        direction=direction,
-        reason=reason,
-        green=green,
-        red=red,
-        green_pct=green_pct,
-        red_pct=red_pct,
-        net_impact=net_impact,
-        call_pressure=call_pressure,
-        put_pressure=put_pressure,
+        HTML, **base,
+        final_decision=final_decision, color=color,
+        weight_meter=weight_meter, price_meter=price_meter,
+        weight_angle=weight_angle, price_angle=price_angle,
+        direction=direction, reason=reason,
+        green=green, red=red, green_pct=green_pct, red_pct=red_pct,
+        net_impact=net_impact, call_pressure=call_pressure, put_pressure=put_pressure,
         entry_advice=entry_advice,
-        pullers=make_rows(pullers),
-        draggers=make_rows(draggers),
-        time=datetime.now().strftime("%d-%m-%Y %H:%M:%S")
-        )
+        pullers=make_rows(pullers), draggers=make_rows(draggers)
+    )
