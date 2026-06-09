@@ -8,68 +8,30 @@ app = Flask(__name__)
 TOKEN = os.environ.get("UPSTOX_TOKEN")
 
 instruments = {
-"HDFCBANK":"NSE_EQ|INE040A01034","RELIANCE":"NSE_EQ|INE002A01018","ICICIBANK":"NSE_EQ|INE090A01021","BHARTIARTL":"NSE_EQ|INE397D01024",
-"LT":"NSE_EQ|INE018A01030","SBIN":"NSE_EQ|INE062A01020","INFY":"NSE_EQ|INE009A01021","AXISBANK":"NSE_EQ|INE238A01034",
-"ITC":"NSE_EQ|INE154A01025","KOTAKBANK":"NSE_EQ|INE237A01036","M&M":"NSE_EQ|INE101A01026","TCS":"NSE_EQ|INE467B01029",
-"BAJFINANCE":"NSE_EQ|INE296A01032","HINDUNILVR":"NSE_EQ|INE030A01027","SUNPHARMA":"NSE_EQ|INE044A01036","NTPC":"NSE_EQ|INE733E01010",
-"TITAN":"NSE_EQ|INE280A01028","ETERNAL":"NSE_EQ|INE758T01015","TATASTEEL":"NSE_EQ|INE081A01020","MARUTI":"NSE_EQ|INE585B01010",
-"BEL":"NSE_EQ|INE263A01024","HINDALCO":"NSE_EQ|INE038A01020","POWERGRID":"NSE_EQ|INE752E01010","ULTRACEMCO":"NSE_EQ|INE481G01011",
-"SHRIRAMFIN":"NSE_EQ|INE721A01047","HCLTECH":"NSE_EQ|INE860A01027","ADANIPORTS":"NSE_EQ|INE742F01042","JSWSTEEL":"NSE_EQ|INE019A01038",
-"ONGC":"NSE_EQ|INE213A01029","BAJAJ-AUTO":"NSE_EQ|INE917I01010","ASIANPAINT":"NSE_EQ|INE021A01026","COALINDIA":"NSE_EQ|INE522F01014",
-"GRASIM":"NSE_EQ|INE047A01021","NESTLEIND":"NSE_EQ|INE239A01024","BAJAJFINSV":"NSE_EQ|INE918I01026","EICHERMOT":"NSE_EQ|INE066A01021",
-"INDIGO":"NSE_EQ|INE646L01027","TECHM":"NSE_EQ|INE669C01036","TRENT":"NSE_EQ|INE849A01020","SBILIFE":"NSE_EQ|INE123W01016",
-"DRREDDY":"NSE_EQ|INE089A01031","JIOFIN":"NSE_EQ|INE758E01017","APOLLOHOSP":"NSE_EQ|INE437A01024","TATACONSUM":"NSE_EQ|INE192A01025",
-"CIPLA":"NSE_EQ|INE059A01026","MAXHEALTH":"NSE_EQ|INE027H01010","TMPV":"NSE_EQ|INE155A01022","ADANIENT":"NSE_EQ|INE423A01024",
-"HDFCLIFE":"NSE_EQ|INE795G01014","WIPRO":"NSE_EQ|INE075A01022","INDUSINDBK":"NSE_EQ|INE095A01012",
-"BANKBARODA":"NSE_EQ|INE028A01039","PNB":"NSE_EQ|INE160A01022","CANBK":"NSE_EQ|INE476A01014","FEDERALBNK":"NSE_EQ|INE171A01029",
-"IDFCFIRSTB":"NSE_EQ|INE092T01019","AUBANK":"NSE_EQ|INE949L01017"
+"HDFCBANK":"NSE_EQ|INE040A01034","RELIANCE":"NSE_EQ|INE002A01018","ICICIBANK":"NSE_EQ|INE090A01021","SBIN":"NSE_EQ|INE062A01020","KOTAKBANK":"NSE_EQ|INE237A01036","AXISBANK":"NSE_EQ|INE238A01034","INDUSINDBK":"NSE_EQ|INE095A01012","BANKBARODA":"NSE_EQ|INE028A01039","PNB":"NSE_EQ|INE160A01022","CANBK":"NSE_EQ|INE476A01014","FEDERALBNK":"NSE_EQ|INE171A01029","IDFCFIRSTB":"NSE_EQ|INE092T01019","AUBANK":"NSE_EQ|INE949L01017",
+"BHARTIARTL":"NSE_EQ|INE397D01024","LT":"NSE_EQ|INE018A01030","INFY":"NSE_EQ|INE009A01021","ITC":"NSE_EQ|INE154A01025","M&M":"NSE_EQ|INE101A01026","TCS":"NSE_EQ|INE467B01029","BAJFINANCE":"NSE_EQ|INE296A01032","HINDUNILVR":"NSE_EQ|INE030A01027","SUNPHARMA":"NSE_EQ|INE044A01036","NTPC":"NSE_EQ|INE733E01010","TITAN":"NSE_EQ|INE280A01028","TATASTEEL":"NSE_EQ|INE081A01020","MARUTI":"NSE_EQ|INE585B01010","BEL":"NSE_EQ|INE263A01024","HINDALCO":"NSE_EQ|INE038A01020","POWERGRID":"NSE_EQ|INE752E01010","ULTRACEMCO":"NSE_EQ|INE481G01011","HCLTECH":"NSE_EQ|INE860A01027","ADANIPORTS":"NSE_EQ|INE742F01042","JSWSTEEL":"NSE_EQ|INE019A01038","ONGC":"NSE_EQ|INE213A01029","ASIANPAINT":"NSE_EQ|INE021A01026","COALINDIA":"NSE_EQ|INE522F01014","GRASIM":"NSE_EQ|INE047A01021","NESTLEIND":"NSE_EQ|INE239A01024","BAJAJFINSV":"NSE_EQ|INE918I01026","TECHM":"NSE_EQ|INE669C01036","TRENT":"NSE_EQ|INE849A01020","DRREDDY":"NSE_EQ|INE089A01031","CIPLA":"NSE_EQ|INE059A01026","ADANIENT":"NSE_EQ|INE423A01024","WIPRO":"NSE_EQ|INE075A01022"
 }
 
-nifty_weights = {
-"HDFCBANK":10.73,"RELIANCE":8.78,"ICICIBANK":8.21,"BHARTIARTL":5.26,"LT":4.28,"SBIN":4.03,"INFY":3.76,"AXISBANK":3.31,
-"ITC":2.76,"KOTAKBANK":2.56,"M&M":2.51,"TCS":2.30,"BAJFINANCE":2.28,"HINDUNILVR":1.81,"SUNPHARMA":1.74,"NTPC":1.72,
-"TITAN":1.64,"ETERNAL":1.62,"TATASTEEL":1.59,"MARUTI":1.59,"BEL":1.40,"HINDALCO":1.37,"POWERGRID":1.31,"ULTRACEMCO":1.25,
-"SHRIRAMFIN":1.19,"HCLTECH":1.15,"ADANIPORTS":1.11,"JSWSTEEL":1.08,"ONGC":1.06,"BAJAJ-AUTO":1.01,"ASIANPAINT":1.00,
-"COALINDIA":0.99,"GRASIM":0.97,"NESTLEIND":0.95,"BAJAJFINSV":0.92,"EICHERMOT":0.89,"INDIGO":0.88,"TECHM":0.85,"TRENT":0.84,
-"SBILIFE":0.74,"DRREDDY":0.73,"JIOFIN":0.73,"APOLLOHOSP":0.71,"TATACONSUM":0.68,"CIPLA":0.67,"MAXHEALTH":0.67,"TMPV":0.65,
-"ADANIENT":0.63,"HDFCLIFE":0.57,"WIPRO":0.52
-}
-
-banknifty_weights = {
-"HDFCBANK":28,"ICICIBANK":24,"SBIN":11,"KOTAKBANK":10,"AXISBANK":9,"INDUSINDBK":5,
-"BANKBARODA":4,"PNB":3,"CANBK":2.5,"FEDERALBNK":1.5,"IDFCFIRSTB":1,"AUBANK":1
-}
+nifty_weights = {"HDFCBANK":10.73,"RELIANCE":8.78,"ICICIBANK":8.21,"BHARTIARTL":5.26,"LT":4.28,"SBIN":4.03,"INFY":3.76,"AXISBANK":3.31,"ITC":2.76,"KOTAKBANK":2.56,"M&M":2.51,"TCS":2.30,"BAJFINANCE":2.28,"HINDUNILVR":1.81,"SUNPHARMA":1.74,"NTPC":1.72,"TITAN":1.64,"TATASTEEL":1.59,"MARUTI":1.59,"BEL":1.40,"HINDALCO":1.37,"POWERGRID":1.31,"ULTRACEMCO":1.25,"HCLTECH":1.15,"ADANIPORTS":1.11,"JSWSTEEL":1.08,"ONGC":1.06,"ASIANPAINT":1.00,"COALINDIA":0.99,"GRASIM":0.97,"NESTLEIND":0.95,"BAJAJFINSV":0.92,"TECHM":0.85,"TRENT":0.84,"DRREDDY":0.73,"CIPLA":0.67,"ADANIENT":0.63,"WIPRO":0.52}
+bank_weights = {"HDFCBANK":28,"ICICIBANK":24,"SBIN":11,"KOTAKBANK":10,"AXISBANK":9,"INDUSINDBK":5,"BANKBARODA":4,"PNB":3,"CANBK":2.5,"FEDERALBNK":1.5,"IDFCFIRSTB":1,"AUBANK":1}
 
 configs = {
-"NIFTY": {"title":"NIFTY 50","index_key":"NSE_INDEX|Nifty 50","weights":nifty_weights,"analysis":True},
-"BANKNIFTY": {"title":"BANKNIFTY","index_key":"NSE_INDEX|Nifty Bank","weights":banknifty_weights,"analysis":True},
-"SENSEX": {"title":"SENSEX","index_key":"BSE_INDEX|SENSEX","weights":{},"analysis":False}
+"NIFTY":{"title":"NIFTY 50","index_key":"NSE_INDEX|Nifty 50","weights":nifty_weights},
+"BANKNIFTY":{"title":"BANKNIFTY","index_key":"NSE_INDEX|Nifty Bank","weights":bank_weights},
+"SENSEX":{"title":"SENSEX","index_key":"BSE_INDEX|SENSEX","weights":{}}
 }
 
-def h():
+def auth_headers():
     return {"Accept":"application/json","Authorization":"Bearer " + TOKEN}
-
-def make_rows(items):
-    out = ""
-    for r in items:
-        cls = "green" if r["impact"] > 0 else "red"
-        rc = "green" if r["rupee"] > 0 else "red"
-        out += f"<tr><td>{r['symbol']}</td><td>{r['price']}</td><td class='{rc}'>{r['rupee']}</td><td class='{cls}'>{r['pct']}%</td><td>{r['weight']}%</td><td class='{cls}'>{r['impact']}</td></tr>"
-    return Markup(out)
 
 @app.route("/candles")
 def candles():
-    if not TOKEN:
-        return jsonify({"error":"Token missing"})
-
     idx = request.args.get("index","NIFTY").upper()
     tf = request.args.get("tf","1D")
     if idx not in configs:
         idx = "NIFTY"
-
     key = quote(configs[idx]["index_key"], safe="")
     today = datetime.now().date()
-
     try:
         if tf == "1D":
             url = f"https://api.upstox.com/v3/historical-candle/intraday/{key}/minutes/5"
@@ -81,32 +43,22 @@ def candles():
             url = f"https://api.upstox.com/v3/historical-candle/{key}/days/1/{today}/{today-timedelta(days=100)}"
         elif tf == "6M":
             url = f"https://api.upstox.com/v3/historical-candle/{key}/days/1/{today}/{today-timedelta(days=200)}"
-        elif tf == "1Y":
-            url = f"https://api.upstox.com/v3/historical-candle/{key}/weeks/1/{today}/{today-timedelta(days=370)}"
         else:
-            url = f"https://api.upstox.com/v3/historical-candle/intraday/{key}/minutes/5"
-
-        r = requests.get(url, headers=h(), timeout=20)
-        js = r.json()
+            url = f"https://api.upstox.com/v3/historical-candle/{key}/weeks/1/{today}/{today-timedelta(days=370)}"
+        js = requests.get(url, headers=auth_headers(), timeout=20).json()
         raw = js.get("data",{}).get("candles",[])
         out = []
         for c in raw:
-            out.append({
-                "time": int(datetime.fromisoformat(c[0].replace("Z","+00:00")).timestamp()),
-                "open": float(c[1]),
-                "high": float(c[2]),
-                "low": float(c[3]),
-                "close": float(c[4])
-            })
-        return jsonify({"candles": list(reversed(out))})
+            out.append({"time":int(datetime.fromisoformat(c[0].replace("Z","+00:00")).timestamp()),"open":float(c[1]),"high":float(c[2]),"low":float(c[3]),"close":float(c[4])})
+        return jsonify({"candles":list(reversed(out))})
     except Exception as e:
-        return jsonify({"error": str(e)})
+        return jsonify({"error":str(e)})
 
 HTML = """
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ title }} V18 Dashboard</title>
+<title>{{ title }} V18</title>
 <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
 <style>
 body{font-family:Arial;background:#f4f6f8;padding:12px;margin:0}
@@ -118,7 +70,8 @@ select{font-size:18px;padding:10px;border-radius:10px;width:100%}.small{text-ali
 button{padding:9px;margin:3px;border:0;border-radius:8px;background:#e8eaed;font-weight:bold}
 button.active{background:#111;color:white}
 input{padding:10px;border-radius:8px;border:1px solid #ccc;width:38%;margin:3px}
-#chart{height:520px}@media (orientation:landscape){#chart{height:430px}}
+.chartbox{height:520px}
+@media (orientation:landscape){.chartbox{height:430px}}
 .meterbox{text-align:center}.gauge{width:280px;height:170px;margin:15px auto;position:relative;overflow:hidden}
 .gauge:before{content:"";position:absolute;left:20px;top:20px;width:240px;height:240px;border-radius:50%;background:conic-gradient(from 270deg,#d93025 0deg 80deg,#fbbc04 80deg 100deg,#0a9f45 100deg 180deg,transparent 180deg 360deg)}
 .gauge:after{content:"";position:absolute;left:60px;top:60px;width:160px;height:160px;background:white;border-radius:50%}
@@ -154,7 +107,7 @@ input{padding:10px;border-radius:8px;border:1px solid #ccc;width:38%;margin:3px}
 <button onclick="loadChart('6M')">6M</button>
 <button onclick="loadChart('1Y')">1Y</button>
 <p id="status" class="small">Loading...</p>
-<div id="chart"></div>
+<div id="chart" class="chartbox"></div>
 </div>
 
 <div class="card">
@@ -170,17 +123,15 @@ Saved Resistance: <span class="big red" id="savedResistance">-</span><br><br>
 <div class="card meterbox">
 <h3>Weightage Impact Meter</h3>
 <div class="gauge">
-<div class="tick t10">10</div><div class="tick t20">20</div><div class="tick t30">30</div><div class="tick t40">40</div><div class="tick t50">50</div>
-<div class="tick t60">60</div><div class="tick t70">70</div><div class="tick t80">80</div><div class="tick t90">90</div><div class="tick t100">100</div>
+<div class="tick t10">10</div><div class="tick t20">20</div><div class="tick t30">30</div><div class="tick t40">40</div><div class="tick t50">50</div><div class="tick t60">60</div><div class="tick t70">70</div><div class="tick t80">80</div><div class="tick t90">90</div><div class="tick t100">100</div>
 <div class="needle" style="transform:rotate({{ weight_angle }}deg)"></div><div class="center"></div><div class="score">{{ weight_meter }}</div>
 </div><div class="labels"><span>Bearish</span><span>50</span><span>Bullish</span></div>
 </div>
 
 <div class="card meterbox">
-<h3>Price / ₹ Movement Meter</h3>
+<h3>Price Movement Meter</h3>
 <div class="gauge">
-<div class="tick t10">10</div><div class="tick t20">20</div><div class="tick t30">30</div><div class="tick t40">40</div><div class="tick t50">50</div>
-<div class="tick t60">60</div><div class="tick t70">70</div><div class="tick t80">80</div><div class="tick t90">90</div><div class="tick t100">100</div>
+<div class="tick t10">10</div><div class="tick t20">20</div><div class="tick t30">30</div><div class="tick t40">40</div><div class="tick t50">50</div><div class="tick t60">60</div><div class="tick t70">70</div><div class="tick t80">80</div><div class="tick t90">90</div><div class="tick t100">100</div>
 <div class="needle" style="transform:rotate({{ price_angle }}deg)"></div><div class="center"></div><div class="score">{{ price_meter }}</div>
 </div><div class="labels"><span>Bearish</span><span>50</span><span>Bullish</span></div>
 </div>
@@ -196,7 +147,7 @@ Saved Resistance: <span class="big red" id="savedResistance">-</span><br><br>
 <div class="card"><h3>Top Pullers</h3><table><tr><th>Stock</th><th>Price</th><th>₹</th><th>%</th><th>Wt</th><th>Impact</th></tr>{{ pullers }}</table></div>
 <div class="card"><h3>Top Draggers</h3><table><tr><th>Stock</th><th>Price</th><th>₹</th><th>%</th><th>Wt</th><th>Impact</th></tr>{{ draggers }}</table></div>
 {% else %}
-<div class="card">SENSEX માટે chart + saved support/resistance છે. Meter માટે Sensex weights manually add કરવા પડશે.</div>
+<div class="card">SENSEX માટે chart + saved support/resistance છે.</div>
 {% endif %}
 
 <p class="small">Updated: {{ time }}</p>
@@ -218,7 +169,6 @@ function setActive(tf){
  document.querySelectorAll("button").forEach(b=>b.classList.remove("active"));
  document.querySelectorAll("button").forEach(b=>{if(b.innerText===tf)b.classList.add("active")});
 }
-
 function drawSavedLines(){
  let sup = localStorage.getItem(selectedIndex+"_support");
  let res = localStorage.getItem(selectedIndex+"_resistance");
@@ -226,35 +176,25 @@ function drawSavedLines(){
  document.getElementById("savedResistance").innerText = res ? res : "-";
  document.getElementById("supportInput").value = sup ? sup : "";
  document.getElementById("resistanceInput").value = res ? res : "";
-
  if(supportLine){ candleSeries.removePriceLine(supportLine); supportLine=null; }
  if(resistanceLine){ candleSeries.removePriceLine(resistanceLine); resistanceLine=null; }
-
- if(sup){
-   supportLine = candleSeries.createPriceLine({price:Number(sup),color:"green",lineWidth:3,lineStyle:LightweightCharts.LineStyle.Solid,axisLabelVisible:true,title:"Support"});
- }
- if(res){
-   resistanceLine = candleSeries.createPriceLine({price:Number(res),color:"red",lineWidth:3,lineStyle:LightweightCharts.LineStyle.Solid,axisLabelVisible:true,title:"Resistance"});
- }
+ if(sup){ supportLine = candleSeries.createPriceLine({price:Number(sup),color:"green",lineWidth:3,axisLabelVisible:true,title:"Support"}); }
+ if(res){ resistanceLine = candleSeries.createPriceLine({price:Number(res),color:"red",lineWidth:3,axisLabelVisible:true,title:"Resistance"}); }
 }
-
 function saveSupport(){ let v=document.getElementById("supportInput").value; if(v){localStorage.setItem(selectedIndex+"_support",v); drawSavedLines();} }
 function saveResistance(){ let v=document.getElementById("resistanceInput").value; if(v){localStorage.setItem(selectedIndex+"_resistance",v); drawSavedLines();} }
 function clearSR(){ localStorage.removeItem(selectedIndex+"_support"); localStorage.removeItem(selectedIndex+"_resistance"); drawSavedLines(); }
-
 function loadChart(tf){
  setActive(tf);
  document.getElementById("status").innerText="Loading "+tf+"...";
  fetch("/candles?index="+selectedIndex+"&tf="+tf)
- .then(r=>r.json())
- .then(d=>{
+ .then(r=>r.json()).then(d=>{
    if(d.error){document.getElementById("status").innerText="Error: "+d.error;return;}
    candleSeries.setData(d.candles);
    chart.timeScale().fitContent();
    drawSavedLines();
    document.getElementById("status").innerText=tf+" candles: "+d.candles.length;
- })
- .catch(e=>{document.getElementById("status").innerText="Chart failed";});
+ }).catch(e=>{document.getElementById("status").innerText="Chart failed";});
 }
 loadChart("1D");
 </script>
@@ -262,41 +202,40 @@ loadChart("1D");
 </html>
 """
 
+def make_rows(items):
+    out=""
+    for r in items:
+        cls="green" if r["impact"]>0 else "red"
+        rc="green" if r["rupee"]>0 else "red"
+        out += f"<tr><td>{r['symbol']}</td><td>{r['price']}</td><td class='{rc}'>{r['rupee']}</td><td class='{cls}'>{r['pct']}%</td><td>{r['weight']}%</td><td class='{cls}'>{r['impact']}</td></tr>"
+    return Markup(out)
+
 @app.route("/")
 def home():
-    selected = request.args.get("index","NIFTY").upper()
+    selected=request.args.get("index","NIFTY").upper()
     if selected not in configs:
-        selected = "NIFTY"
-    cfg = configs[selected]
-
+        selected="NIFTY"
+    cfg=configs[selected]
     if not TOKEN:
         return "UPSTOX_TOKEN missing"
 
     try:
-        idx = requests.get("https://api.upstox.com/v2/market-quote/ltp",headers=h(),params={"instrument_key":cfg["index_key"]},timeout=10).json()
-        index_price = list(idx["data"].values())[0]["last_price"]
+        idx=requests.get("https://api.upstox.com/v2/market-quote/ltp",headers=auth_headers(),params={"instrument_key":cfg["index_key"]},timeout=10).json()
+        index_price=list(idx["data"].values())[0]["last_price"]
     except:
-        index_price = "Error"
+        index_price="Error"
 
-    base = dict(selected=selected,title=cfg["title"],index_price=index_price,analysis=cfg["analysis"],time=datetime.now().strftime("%d-%m-%Y %H:%M:%S"))
+    analysis = bool(cfg["weights"])
+    if not analysis:
+        return render_template_string(HTML, selected=selected,title=cfg["title"],index_price=index_price,analysis=False,time=datetime.now().strftime("%d-%m-%Y %H:%M:%S"),final_decision="CHART MODE",color="#fff3cd",weight_meter=50,price_meter=50,weight_angle=0,price_angle=0,direction="",green=0,red=0,green_pct=0,red_pct=0,net_impact=0,call_pressure=0,put_pressure=0,entry_advice="",pullers=Markup(""),draggers=Markup(""))
 
-    if not cfg["analysis"]:
-        return render_template_string(HTML, **base, final_decision="CHART MODE", color="#fff3cd",
-            weight_meter=50,price_meter=50,weight_angle=0,price_angle=0,direction="",green=0,red=0,green_pct=0,red_pct=0,
-            net_impact=0,call_pressure=0,put_pressure=0,entry_advice="",pullers=Markup(""),draggers=Markup(""))
-
-    weights = cfg["weights"]
-    keys = [instruments[s] for s in weights if s in instruments]
-
-    try:
-        data = requests.get("https://api.upstox.com/v2/market-quote/quotes",headers=h(),params={"instrument_key":",".join(keys)},timeout=15).json()["data"]
-    except Exception as e:
-        return "Upstox API Error: "+str(e)
+    weights=cfg["weights"]
+    keys=[instruments[s] for s in weights if s in instruments]
+    data=requests.get("https://api.upstox.com/v2/market-quote/quotes",headers=auth_headers(),params={"instrument_key":",".join(keys)},timeout=15).json()["data"]
 
     green=red=flat=0
     total_plus=total_minus=pos_imp=neg_imp=0
     rows=[]
-
     for s in data.values():
         symbol=s.get("symbol","")
         price=round(s.get("last_price",0),2)
@@ -305,7 +244,6 @@ def home():
         pct=round((rupee/close)*100,2) if close else 0
         wt=weights.get(symbol,0)
         impact=round(wt*pct,2)
-
         if rupee>0:
             green+=1; total_plus+=rupee; pos_imp+=impact
         elif rupee<0:
@@ -338,8 +276,4 @@ def home():
     pullers=sorted([r for r in rows if r["impact"]>0],key=lambda x:x["impact"],reverse=True)[:10]
     draggers=sorted([r for r in rows if r["impact"]<0],key=lambda x:x["impact"])[:10]
 
-    return render_template_string(HTML, **base, final_decision=final_decision,color=color,
-        weight_meter=weight_meter,price_meter=price_meter,weight_angle=weight_angle,price_angle=price_angle,
-        direction=direction,green=green,red=red,green_pct=green_pct,red_pct=red_pct,net_impact=net_impact,
-        call_pressure=call_pressure,put_pressure=put_pressure,entry_advice=entry_advice,
-        pullers=make_rows(pullers),draggers=make_rows(draggers))
+    return render_template_string(HTML, selected=selected,title=cfg["title"],index_price=index_price,analysis=True,time=datetime.now().strftime("%d-%m-%Y %H:%M:%S"),final_decision=final_decision,color=color,weight_meter=weight_meter,price_meter=price_meter,weight_angle=weight_angle,price_angle=price_angle,direction=direction,green=green,red=red,green_pct=green_pct,red_pct=red_pct,net_impact=net_impact,call_pressure=call_pressure,put_pressure=put_pressure,entry_advice=entry_advice,pullers=make_rows(pullers),draggers=make_rows(draggers))
