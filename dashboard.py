@@ -19,21 +19,67 @@ HTML = """
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="refresh" content="5">
-<title>Nifty Impact Dashboard V9</title>
+<title>Nifty Meter Dashboard V10</title>
 <style>
 body{font-family:Arial;background:#f4f6f8;padding:12px;margin:0}
-h2{text-align:center}.card{background:white;padding:14px;margin:8px;border-radius:14px;box-shadow:0 2px 5px #ddd}
+h2{text-align:center}
+.card{background:white;padding:14px;margin:8px;border-radius:14px;box-shadow:0 2px 5px #ddd}
 .signal{padding:18px;border-radius:16px;text-align:center;font-size:23px;font-weight:bold;margin:8px}
-.big{font-size:23px;font-weight:bold}.green{color:green;font-weight:bold}.red{color:red;font-weight:bold}
-table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:7px;border-bottom:1px solid #ddd;text-align:left}
+.big{font-size:23px;font-weight:bold}
+.green{color:green;font-weight:bold}.red{color:red;font-weight:bold}
+table{width:100%;border-collapse:collapse;font-size:13px}
+td,th{padding:7px;border-bottom:1px solid #ddd;text-align:left}
 .small{text-align:center;color:#555}
+
+.meterbox{text-align:center}
+.meter{
+  width:210px;height:210px;border-radius:50%;margin:10px auto;
+  background:conic-gradient(#d93025 0deg 162deg,#fbbc04 162deg 198deg,#0a9f45 198deg 360deg);
+  position:relative;
+}
+.meter:after{
+  content:"";position:absolute;left:25px;top:25px;width:160px;height:160px;
+  background:white;border-radius:50%;
+}
+.needle{
+  position:absolute;left:101px;top:22px;width:8px;height:88px;background:#111;
+  transform-origin:4px 83px;border-radius:4px;z-index:2;
+}
+.center{
+  position:absolute;left:85px;top:85px;width:40px;height:40px;background:#111;border-radius:50%;z-index:3;
+}
+.score{
+  position:absolute;left:0;right:0;top:122px;text-align:center;font-size:28px;font-weight:bold;z-index:4;
+}
+.labels{display:flex;justify-content:space-between;font-size:13px;margin:0 18px}
 </style>
 </head>
 <body>
-<h2>NIFTY IMPACT DASHBOARD V9</h2>
+
+<h2>NIFTY METER DASHBOARD V10</h2>
 
 <div class="card">Nifty 50 Live: <span class="big">{{ nifty_price }}</span></div>
 <div class="signal" style="background:{{ color }}">{{ final_decision }}</div>
+
+<div class="card meterbox">
+<h3>Weightage Impact Meter</h3>
+<div class="meter">
+  <div class="needle" style="transform:rotate({{ weight_angle }}deg)"></div>
+  <div class="center"></div>
+  <div class="score">{{ weight_meter }}</div>
+</div>
+<div class="labels"><span>0 Bearish</span><span>50 Neutral</span><span>100 Bullish</span></div>
+</div>
+
+<div class="card meterbox">
+<h3>Price / ₹ Movement Meter</h3>
+<div class="meter">
+  <div class="needle" style="transform:rotate({{ price_angle }}deg)"></div>
+  <div class="center"></div>
+  <div class="score">{{ price_meter }}</div>
+</div>
+<div class="labels"><span>0 Bearish</span><span>50 Neutral</span><span>100 Bullish</span></div>
+</div>
 
 <div class="card">Direction: <span class="big">{{ direction }}</span></div>
 <div class="card">Reason: <span class="big">{{ reason }}</span></div>
@@ -129,10 +175,7 @@ def home():
         else:
             flat += 1
 
-        rows.append({
-            "symbol":symbol,"price":price,"rupee":rupee,
-            "pct":pct,"weight":wt,"impact":impact
-        })
+        rows.append({"symbol":symbol,"price":price,"rupee":rupee,"pct":pct,"weight":wt,"impact":impact})
 
     total = green + red + flat
     green_pct = round(green * 100 / total,1) if total else 0
@@ -146,39 +189,42 @@ def home():
     negative_impact = round(negative_impact,2)
     net_impact = round(positive_impact + negative_impact,2)
 
-    call_pressure = max(0, min(100, round(50 + net_impact,1)))
-    put_pressure = max(0, min(100, round(50 - net_impact,1)))
+    impact_total = positive_impact + abs(negative_impact)
+    if impact_total > 0:
+        weight_meter = round((positive_impact / impact_total) * 100, 1)
+    else:
+        weight_meter = 50
 
-    if net_impact >= 8:
-        final_decision = "CALL BUY FAVOURABLE"
-        direction = "CALL SIDE STRONG"
+    rupee_total = total_rupee_plus + abs(total_rupee_minus)
+    if rupee_total > 0:
+        price_meter = round((total_rupee_plus / rupee_total) * 100, 1)
+    else:
+        price_meter = 50
+
+    weight_angle = round((weight_meter * 3.6), 1)
+    price_angle = round((price_meter * 3.6), 1)
+
+    call_pressure = weight_meter
+    put_pressure = round(100 - weight_meter, 1)
+
+    if weight_meter >= 65:
+        final_decision = "CALL SIDE BULLISH"
+        direction = "BULLISH"
         entry_advice = "Call only after breakout confirmation"
         color = "#d9fbe6"
-        reason = "Weighted positive impact strong છે."
-    elif net_impact <= -8:
-        final_decision = "PUT BUY FAVOURABLE"
-        direction = "PUT SIDE STRONG"
+        reason = "Weightage impact meter 50 ઉપર છે."
+    elif weight_meter <= 35:
+        final_decision = "PUT SIDE BEARISH"
+        direction = "BEARISH"
         entry_advice = "Put only after breakdown confirmation"
         color = "#ffe1e1"
-        reason = "Weighted negative impact strong છે."
-    elif net_impact > 2:
-        final_decision = "CALL SIDE WATCH"
-        direction = "MILD BULLISH"
-        entry_advice = "Wait for breakout"
-        color = "#fff3cd"
-        reason = "Positive impact છે, પણ strong નથી."
-    elif net_impact < -2:
-        final_decision = "PUT SIDE WATCH"
-        direction = "MILD BEARISH"
-        entry_advice = "Wait for breakdown"
-        color = "#fff3cd"
-        reason = "Negative impact છે, પણ strong નથી."
+        reason = "Weightage impact meter 50 નીચે છે."
     else:
-        final_decision = "NO TRADE"
-        direction = "CHOPPY / SIDEWAYS"
+        final_decision = "NO TRADE / SIDEWAYS"
+        direction = "CHOPPY"
         entry_advice = "Avoid option buying"
         color = "#fff3cd"
-        reason = "Net impact weak છે."
+        reason = "Meter 35 થી 65 વચ્ચે છે."
 
     pullers = sorted([r for r in rows if r["impact"] > 0], key=lambda x: x["impact"], reverse=True)[:10]
     draggers = sorted([r for r in rows if r["impact"] < 0], key=lambda x: x["impact"])[:10]
@@ -189,6 +235,10 @@ def home():
         nifty_price=nifty_price,
         final_decision=final_decision,
         color=color,
+        weight_meter=weight_meter,
+        price_meter=price_meter,
+        weight_angle=weight_angle,
+        price_angle=price_angle,
         direction=direction,
         reason=reason,
         green=green,
