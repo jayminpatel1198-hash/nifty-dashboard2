@@ -19,7 +19,8 @@ HTML = """
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="refresh" content="5">
-<title>Nifty Meter Dashboard V11</title>
+<title>Nifty Meter + Chart Dashboard V12</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
 body{font-family:Arial;background:#f4f6f8;padding:12px;margin:0}
 h2{text-align:center}
@@ -41,23 +42,31 @@ td,th{padding:7px;border-bottom:1px solid #ddd;text-align:left}
 .t10{left:18px;top:126px}.t20{left:30px;top:88px}.t30{left:58px;top:54px}.t40{left:96px;top:31px}.t50{left:132px;top:22px}
 .t60{left:172px;top:31px}.t70{left:207px;top:54px}.t80{left:235px;top:88px}.t90{left:247px;top:126px}.t100{left:230px;top:148px}
 .labels{display:flex;justify-content:space-between;font-size:13px;margin:0 18px}
+.chartbox{height:260px}
 </style>
 </head>
 <body>
 
-<h2>NIFTY METER DASHBOARD V11</h2>
+<h2>NIFTY METER + CHART DASHBOARD V12</h2>
 
 <div class="card">Nifty 50 Live: <span class="big">{{ nifty_price }}</span></div>
 <div class="signal" style="background:{{ color }}">{{ final_decision }}</div>
 
+<div class="card">
+<h3>Nifty 50 Live Chart</h3>
+<div class="chartbox">
+<canvas id="niftyChart"></canvas>
+</div>
+</div>
+
 <div class="card meterbox">
 <h3>Weightage Impact Meter</h3>
 <div class="gauge">
-  <div class="tick t10">10</div><div class="tick t20">20</div><div class="tick t30">30</div><div class="tick t40">40</div><div class="tick t50">50</div>
-  <div class="tick t60">60</div><div class="tick t70">70</div><div class="tick t80">80</div><div class="tick t90">90</div><div class="tick t100">100</div>
-  <div class="needle" style="transform:rotate({{ weight_angle }}deg)"></div>
-  <div class="center"></div>
-  <div class="score">{{ weight_meter }}</div>
+<div class="tick t10">10</div><div class="tick t20">20</div><div class="tick t30">30</div><div class="tick t40">40</div><div class="tick t50">50</div>
+<div class="tick t60">60</div><div class="tick t70">70</div><div class="tick t80">80</div><div class="tick t90">90</div><div class="tick t100">100</div>
+<div class="needle" style="transform:rotate({{ weight_angle }}deg)"></div>
+<div class="center"></div>
+<div class="score">{{ weight_meter }}</div>
 </div>
 <div class="labels"><span>Bearish</span><span>50 Neutral</span><span>Bullish</span></div>
 </div>
@@ -65,11 +74,11 @@ td,th{padding:7px;border-bottom:1px solid #ddd;text-align:left}
 <div class="card meterbox">
 <h3>Price / ₹ Movement Meter</h3>
 <div class="gauge">
-  <div class="tick t10">10</div><div class="tick t20">20</div><div class="tick t30">30</div><div class="tick t40">40</div><div class="tick t50">50</div>
-  <div class="tick t60">60</div><div class="tick t70">70</div><div class="tick t80">80</div><div class="tick t90">90</div><div class="tick t100">100</div>
-  <div class="needle" style="transform:rotate({{ price_angle }}deg)"></div>
-  <div class="center"></div>
-  <div class="score">{{ price_meter }}</div>
+<div class="tick t10">10</div><div class="tick t20">20</div><div class="tick t30">30</div><div class="tick t40">40</div><div class="tick t50">50</div>
+<div class="tick t60">60</div><div class="tick t70">70</div><div class="tick t80">80</div><div class="tick t90">90</div><div class="tick t100">100</div>
+<div class="needle" style="transform:rotate({{ price_angle }}deg)"></div>
+<div class="center"></div>
+<div class="score">{{ price_meter }}</div>
 </div>
 <div class="labels"><span>Bearish</span><span>50 Neutral</span><span>Bullish</span></div>
 </div>
@@ -93,6 +102,54 @@ td,th{padding:7px;border-bottom:1px solid #ddd;text-align:left}
 <div class="card"><h3>All 50 Stocks Live Impact</h3><table><tr><th>Stock</th><th>Price</th><th>₹ Chg</th><th>%</th><th>Wt</th><th>Impact</th></tr>{{ all_rows }}</table></div>
 
 <p class="small">Auto refresh 5 sec | Updated: {{ time }}</p>
+
+<script>
+const niftyValue = Number("{{ nifty_price }}");
+const nowLabel = "{{ chart_time }}";
+
+let saved = localStorage.getItem("niftyChartDataV12");
+let chartData = saved ? JSON.parse(saved) : [];
+
+if (!isNaN(niftyValue) && niftyValue > 0) {
+  chartData.push({time: nowLabel, price: niftyValue});
+}
+
+if (chartData.length > 60) {
+  chartData = chartData.slice(chartData.length - 60);
+}
+
+localStorage.setItem("niftyChartDataV12", JSON.stringify(chartData));
+
+const labels = chartData.map(x => x.time);
+const prices = chartData.map(x => x.price);
+
+const ctx = document.getElementById("niftyChart");
+new Chart(ctx, {
+  type: "line",
+  data: {
+    labels: labels,
+    datasets: [{
+      label: "Nifty 50",
+      data: prices,
+      borderWidth: 2,
+      tension: 0.25,
+      pointRadius: 2
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: true }
+    },
+    scales: {
+      x: { ticks: { maxTicksLimit: 6 } },
+      y: { beginAtZero: false }
+    }
+  }
+});
+</script>
+
 </body>
 </html>
 """
@@ -193,12 +250,31 @@ def home():
 
     return render_template_string(
         HTML,
-        nifty_price=nifty_price, final_decision=final_decision, color=color,
-        weight_meter=weight_meter, price_meter=price_meter, weight_angle=weight_angle, price_angle=price_angle,
-        direction=direction, reason=reason, green=green, red=red, green_pct=green_pct, red_pct=red_pct,
-        total_rupee_plus=total_rupee_plus, total_rupee_minus=total_rupee_minus, net_rupee=net_rupee,
-        positive_impact=positive_impact, negative_impact=negative_impact, net_impact=net_impact,
-        call_pressure=call_pressure, put_pressure=put_pressure, entry_advice=entry_advice,
-        pullers=make_rows(pullers), draggers=make_rows(draggers), all_rows=make_rows(all_sorted),
-        time=datetime.now().strftime("%d-%m-%Y %H:%M:%S")
-    )
+        nifty_price=nifty_price,
+        final_decision=final_decision,
+        color=color,
+        weight_meter=weight_meter,
+        price_meter=price_meter,
+        weight_angle=weight_angle,
+        price_angle=price_angle,
+        direction=direction,
+        reason=reason,
+        green=green,
+        red=red,
+        green_pct=green_pct,
+        red_pct=red_pct,
+        total_rupee_plus=total_rupee_plus,
+        total_rupee_minus=total_rupee_minus,
+        net_rupee=net_rupee,
+        positive_impact=positive_impact,
+        negative_impact=negative_impact,
+        net_impact=net_impact,
+        call_pressure=call_pressure,
+        put_pressure=put_pressure,
+        entry_advice=entry_advice,
+        pullers=make_rows(pullers),
+        draggers=make_rows(draggers),
+        all_rows=make_rows(all_sorted),
+        time=datetime.now().strftime("%d-%m-%Y %H:%M:%S"),
+        chart_time=datetime.now().strftime("%H:%M:%S")
+  )
