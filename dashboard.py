@@ -19,84 +19,80 @@ HTML = """
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="refresh" content="5">
-<title>Nifty Final Dashboard</title>
+<title>Nifty Compact Dashboard</title>
 <style>
-body{font-family:Arial;background:#f4f6f8;padding:10px;margin:0}
-h2{text-align:center}
-.card{background:white;padding:14px;margin:8px;border-radius:14px;box-shadow:0 2px 5px #ddd}
-.signal{padding:20px;border-radius:16px;text-align:center;font-size:25px;font-weight:bold;margin:8px}
-.big{font-size:24px;font-weight:bold}
-.green{color:green;font-weight:bold}
-.red{color:red;font-weight:bold}
-table{width:100%;border-collapse:collapse;font-size:13px}
-td,th{padding:7px;border-bottom:1px solid #ddd;text-align:left}
-.small{text-align:center;color:#555}
-.meters{display:flex;gap:8px;flex-wrap:wrap}
-.meterbox{flex:1;min-width:280px;text-align:center}
-.gauge{width:260px;height:160px;margin:10px auto;position:relative;overflow:hidden}
-.gauge:before{content:"";position:absolute;left:20px;top:20px;width:220px;height:220px;border-radius:50%;background:conic-gradient(from 270deg,#d93025 0deg 80deg,#fbbc04 80deg 100deg,#0a9f45 100deg 180deg,transparent 180deg 360deg)}
-.gauge:after{content:"";position:absolute;left:55px;top:55px;width:150px;height:150px;background:white;border-radius:50%}
-.needle{position:absolute;left:128px;top:120px;width:5px;height:95px;background:#111;transform-origin:2.5px 2.5px;z-index:3;border-radius:5px}
-.center{position:absolute;left:116px;top:108px;width:29px;height:29px;background:#111;border-radius:50%;z-index:4}
-.score{position:absolute;left:0;right:0;top:92px;text-align:center;font-size:30px;font-weight:bold;z-index:5}
-.tick{position:absolute;font-size:12px;font-weight:bold;z-index:6}
-.t10{left:16px;top:120px}.t20{left:28px;top:84px}.t30{left:54px;top:52px}.t40{left:88px;top:30px}.t50{left:122px;top:22px}.t60{left:158px;top:30px}.t70{left:190px;top:52px}.t80{left:216px;top:84px}.t90{left:228px;top:120px}.t100{left:214px;top:142px}
-.labels{display:flex;justify-content:space-between;font-size:12px;margin:0 15px}
+body{font-family:Arial;background:#f4f6f8;margin:0;padding:8px}
+h2{text-align:center;margin:8px}
+.card{background:white;padding:12px;margin:7px;border-radius:14px;box-shadow:0 2px 5px #ddd}
+.signal{padding:16px;border-radius:16px;text-align:center;font-size:23px;font-weight:bold;margin:7px}
+.big{font-size:23px;font-weight:bold}
+.green{color:green;font-weight:bold}.red{color:red;font-weight:bold}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.box{background:#f8f9fa;border-radius:12px;padding:10px;text-align:center}
+.label{font-size:12px;color:#555}.val{font-size:20px;font-weight:bold}
+.meters{display:flex;gap:7px}
+.meterbox{flex:1;text-align:center;min-width:0}
+.gauge{width:160px;height:100px;margin:5px auto;position:relative;overflow:hidden}
+.gauge:before{content:"";position:absolute;left:10px;top:10px;width:140px;height:140px;border-radius:50%;background:conic-gradient(from 270deg,#d93025 0deg 80deg,#fbbc04 80deg 100deg,#0a9f45 100deg 180deg,transparent 180deg 360deg)}
+.gauge:after{content:"";position:absolute;left:35px;top:35px;width:90px;height:90px;background:white;border-radius:50%}
+.needle{position:absolute;left:78px;top:78px;width:4px;height:58px;background:#111;transform-origin:2px 2px;z-index:3}
+.center{position:absolute;left:70px;top:70px;width:20px;height:20px;background:#111;border-radius:50%;z-index:4}
+.score{position:absolute;left:0;right:0;top:58px;text-align:center;font-size:23px;font-weight:bold;z-index:5}
+.tick{position:absolute;font-size:9px;font-weight:bold;z-index:6}
+.t10{left:6px;top:75px}.t30{left:28px;top:28px}.t50{left:75px;top:8px}.t70{left:118px;top:28px}.t90{left:142px;top:75px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+td,th{padding:6px;border-bottom:1px solid #ddd;text-align:left}
+.small{text-align:center;color:#555;font-size:12px}
 </style>
 </head>
 <body>
 
-<h2>NIFTY 50 LIVE DASHBOARD</h2>
+<h2>NIFTY OPTION DASHBOARD</h2>
 
-<div class="card">Nifty 50 Live Price: <span class="big">{{ nifty_price }}</span></div>
+<div class="card">Nifty 50 Live: <span class="big">{{ nifty_price }}</span></div>
 
 <div class="meters">
 <div class="card meterbox">
-<h3>Weightage Meter</h3>
+<h3>Weightage</h3>
 <div class="gauge">
-<div class="tick t10">10</div><div class="tick t20">20</div><div class="tick t30">30</div><div class="tick t40">40</div><div class="tick t50">50</div><div class="tick t60">60</div><div class="tick t70">70</div><div class="tick t80">80</div><div class="tick t90">90</div><div class="tick t100">100</div>
-<div class="needle" style="transform:rotate({{ weight_angle }}deg)"></div>
-<div class="center"></div><div class="score">{{ weight_meter }}</div>
+<div class="tick t10">10</div><div class="tick t30">30</div><div class="tick t50">50</div><div class="tick t70">70</div><div class="tick t90">90</div>
+<div class="needle" style="transform:rotate({{ weight_angle }}deg)"></div><div class="center"></div><div class="score">{{ weight_meter }}</div>
 </div>
-<div class="labels"><span>Bearish</span><span>50</span><span>Bullish</span></div>
 </div>
 
 <div class="card meterbox">
-<h3>Price Meter</h3>
+<h3>Price</h3>
 <div class="gauge">
-<div class="tick t10">10</div><div class="tick t20">20</div><div class="tick t30">30</div><div class="tick t40">40</div><div class="tick t50">50</div><div class="tick t60">60</div><div class="tick t70">70</div><div class="tick t80">80</div><div class="tick t90">90</div><div class="tick t100">100</div>
-<div class="needle" style="transform:rotate({{ price_angle }}deg)"></div>
-<div class="center"></div><div class="score">{{ price_meter }}</div>
+<div class="tick t10">10</div><div class="tick t30">30</div><div class="tick t50">50</div><div class="tick t70">70</div><div class="tick t90">90</div>
+<div class="needle" style="transform:rotate({{ price_angle }}deg)"></div><div class="center"></div><div class="score">{{ price_meter }}</div>
 </div>
-<div class="labels"><span>Down</span><span>50</span><span>Up</span></div>
 </div>
 </div>
 
 <div class="signal" style="background:{{ color }}">{{ final_decision }}</div>
 
-<div class="card">Total Price Up: <span class="big green">+{{ total_price_up }}</span></div>
-<div class="card">Total Price Down: <span class="big red">{{ total_price_down }}</span></div>
-<div class="card">Net Price Change: <span class="big">{{ net_price_change }}</span></div>
-
-<div class="card">Positive Weight Effect: <span class="big green">+{{ positive_effect }}</span></div>
-<div class="card">Negative Weight Effect: <span class="big red">{{ negative_effect }}</span></div>
-<div class="card">Net Weight Effect: <span class="big">{{ net_effect }}</span></div>
-
-<div class="card">Green Stocks: <span class="big green">{{ green }}</span></div>
-<div class="card">Red Stocks: <span class="big red">{{ red }}</span></div>
-<div class="card">Buy Pressure: <span class="big green">{{ buy_pressure }}%</span></div>
-<div class="card">Sell Pressure: <span class="big red">{{ sell_pressure }}%</span></div>
+<div class="card">
+<div class="grid">
+<div class="box"><div class="label">Price Up</div><div class="val green">+{{ total_price_up }}</div></div>
+<div class="box"><div class="label">Price Down</div><div class="val red">{{ total_price_down }}</div></div>
+<div class="box"><div class="label">Net Price</div><div class="val">{{ net_price_change }}</div></div>
+<div class="box"><div class="label">Net Weight Effect</div><div class="val">{{ net_effect }}</div></div>
+<div class="box"><div class="label">Positive Effect</div><div class="val green">+{{ positive_effect }}</div></div>
+<div class="box"><div class="label">Negative Effect</div><div class="val red">{{ negative_effect }}</div></div>
+<div class="box"><div class="label">Green / Red</div><div class="val"><span class="green">{{ green }}</span> / <span class="red">{{ red }}</span></div></div>
+<div class="box"><div class="label">Buy / Sell Pressure</div><div class="val"><span class="green">{{ buy_pressure }}%</span> / <span class="red">{{ sell_pressure }}%</span></div></div>
+</div>
+</div>
 
 <div class="card">
-<h3>All 50 Stock Price Change + Weightage Net Effect</h3>
+<h3>All 50 Stocks</h3>
 <table>
-<tr><th>Stock</th><th>Price</th><th>₹ Chg</th><th>% Chg</th><th>Weight</th><th>Effect</th></tr>
+<tr><th>Stock</th><th>Price</th><th>₹</th><th>%</th><th>Wt</th><th>Effect</th></tr>
 {{ rows }}
 </table>
 </div>
 
 <p class="small">Auto refresh 5 sec | Updated: {{ time }}</p>
-
 </body>
 </html>
 """
@@ -117,32 +113,20 @@ def home():
     headers = {"Accept":"application/json","Authorization":"Bearer " + TOKEN}
 
     try:
-        nres = requests.get(
-            "https://api.upstox.com/v2/market-quote/ltp",
-            headers=headers,
-            params={"instrument_key":"NSE_INDEX|Nifty 50"},
-            timeout=10
-        )
+        nres = requests.get("https://api.upstox.com/v2/market-quote/ltp", headers=headers, params={"instrument_key":"NSE_INDEX|Nifty 50"}, timeout=10)
         nifty_price = nres.json()["data"]["NSE_INDEX:Nifty 50"]["last_price"]
     except:
         nifty_price = "Error"
 
     try:
-        res = requests.get(
-            "https://api.upstox.com/v2/market-quote/quotes",
-            headers=headers,
-            params={"instrument_key":",".join(stocks.values())},
-            timeout=15
-        )
+        res = requests.get("https://api.upstox.com/v2/market-quote/quotes", headers=headers, params={"instrument_key":",".join(stocks.values())}, timeout=15)
         data = res.json()["data"]
     except Exception as e:
         return "Upstox API Error: " + str(e)
 
-    green = red = flat = 0
-    total_price_up = 0
-    total_price_down = 0
-    positive_effect = 0
-    negative_effect = 0
+    green = red = 0
+    total_price_up = total_price_down = 0
+    positive_effect = negative_effect = 0
     rows = []
 
     for s in data.values():
@@ -162,8 +146,6 @@ def home():
             red += 1
             total_price_down += rupee
             negative_effect += effect
-        else:
-            flat += 1
 
         rows.append({"symbol":symbol,"price":price,"rupee":rupee,"pct":pct,"weight":wt,"effect":effect})
 
@@ -226,4 +208,4 @@ def home():
         sell_pressure=sell_pressure,
         rows=make_table(rows_sorted),
         time=datetime.now().strftime("%d-%m-%Y %H:%M:%S")
-)
+    )
