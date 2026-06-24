@@ -1,7 +1,8 @@
 from flask import Flask, render_template_string
 from markupsafe import Markup
-import requests, os
+import requests, os, xml.etree.ElementTree as ET
 from datetime import datetime
+from urllib.parse import quote_plus
 
 app = Flask(__name__)
 TOKEN = os.environ.get("UPSTOX_TOKEN")
@@ -15,87 +16,107 @@ weights = {
 }
 
 HTML = """
-<html>
-<head>
+<html><head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="refresh" content="5">
-<title>Nifty Compact Dashboard</title>
+<meta http-equiv="refresh" content="60">
+<title>Nifty News Impact Dashboard</title>
 <style>
 body{font-family:Arial;background:#f4f6f8;margin:0;padding:8px}
-h2{text-align:center;margin:8px}
-.card{background:white;padding:12px;margin:7px;border-radius:14px;box-shadow:0 2px 5px #ddd}
+h2{text-align:center;margin:8px}.card{background:white;padding:12px;margin:7px;border-radius:14px;box-shadow:0 2px 5px #ddd}
 .signal{padding:16px;border-radius:16px;text-align:center;font-size:23px;font-weight:bold;margin:7px}
-.big{font-size:23px;font-weight:bold}
-.green{color:green;font-weight:bold}.red{color:red;font-weight:bold}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
-.box{background:#f8f9fa;border-radius:12px;padding:10px;text-align:center}
-.label{font-size:12px;color:#555}.val{font-size:20px;font-weight:bold}
-.meters{display:flex;gap:7px}
-.meterbox{flex:1;text-align:center;min-width:0}
-.gauge{width:160px;height:100px;margin:5px auto;position:relative;overflow:hidden}
-.gauge:before{content:"";position:absolute;left:10px;top:10px;width:140px;height:140px;border-radius:50%;background:conic-gradient(from 270deg,#d93025 0deg 80deg,#fbbc04 80deg 100deg,#0a9f45 100deg 180deg,transparent 180deg 360deg)}
-.gauge:after{content:"";position:absolute;left:35px;top:35px;width:90px;height:90px;background:white;border-radius:50%}
-.needle{position:absolute;left:78px;top:78px;width:4px;height:58px;background:#111;transform-origin:2px 2px;z-index:3}
-.center{position:absolute;left:70px;top:70px;width:20px;height:20px;background:#111;border-radius:50%;z-index:4}
-.score{position:absolute;left:0;right:0;top:58px;text-align:center;font-size:23px;font-weight:bold;z-index:5}
-.tick{position:absolute;font-size:9px;font-weight:bold;z-index:6}
-.t10{left:6px;top:75px}.t30{left:28px;top:28px}.t50{left:75px;top:8px}.t70{left:118px;top:28px}.t90{left:142px;top:75px}
-table{width:100%;border-collapse:collapse;font-size:12px}
-td,th{padding:6px;border-bottom:1px solid #ddd;text-align:left}
-.small{text-align:center;color:#555;font-size:12px}
-</style>
-</head>
+.big{font-size:23px;font-weight:bold}.green{color:green;font-weight:bold}.red{color:red;font-weight:bold}.orange{color:#b36b00;font-weight:bold}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}.box{background:#f8f9fa;border-radius:12px;padding:10px;text-align:center}
+.label{font-size:12px;color:#555}.val{font-size:19px;font-weight:bold}
+.meters{display:flex;gap:7px;flex-wrap:nowrap}.meterbox{flex:1;text-align:center;min-width:0}
+.gauge{width:115px;height:78px;margin:3px auto;position:relative;overflow:hidden}
+.gauge:before{content:"";position:absolute;left:8px;top:8px;width:100px;height:100px;border-radius:50%;background:conic-gradient(from 270deg,#d93025 0deg 80deg,#fbbc04 80deg 100deg,#0a9f45 100deg 180deg,transparent 180deg 360deg)}
+.gauge:after{content:"";position:absolute;left:28px;top:28px;width:60px;height:60px;background:white;border-radius:50%}
+.needle{position:absolute;left:56px;top:58px;width:4px;height:42px;background:#111;transform-origin:2px 2px;z-index:3}
+.center{position:absolute;left:50px;top:52px;width:16px;height:16px;background:#111;border-radius:50%;z-index:4}
+.score{position:absolute;left:0;right:0;top:43px;text-align:center;font-size:20px;font-weight:bold;z-index:5}
+table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:6px;border-bottom:1px solid #ddd;text-align:left}
+.newsitem{font-size:13px;margin:6px 0}.small{text-align:center;color:#555;font-size:12px}
+</style></head>
 <body>
-
-<h2>NIFTY OPTION DASHBOARD</h2>
+<h2>NIFTY NEWS + OPTION DASHBOARD</h2>
 
 <div class="card">Nifty 50 Live: <span class="big">{{ nifty_price }}</span></div>
 
 <div class="meters">
-<div class="card meterbox">
-<h3>Weightage</h3>
-<div class="gauge">
-<div class="tick t10">10</div><div class="tick t30">30</div><div class="tick t50">50</div><div class="tick t70">70</div><div class="tick t90">90</div>
-<div class="needle" style="transform:rotate({{ weight_angle }}deg)"></div><div class="center"></div><div class="score">{{ weight_meter }}</div>
-</div>
-</div>
-
-<div class="card meterbox">
-<h3>Price</h3>
-<div class="gauge">
-<div class="tick t10">10</div><div class="tick t30">30</div><div class="tick t50">50</div><div class="tick t70">70</div><div class="tick t90">90</div>
-<div class="needle" style="transform:rotate({{ price_angle }}deg)"></div><div class="center"></div><div class="score">{{ price_meter }}</div>
-</div>
-</div>
+<div class="card meterbox"><h3>Weight</h3><div class="gauge"><div class="needle" style="transform:rotate({{ weight_angle }}deg)"></div><div class="center"></div><div class="score">{{ weight_meter }}</div></div></div>
+<div class="card meterbox"><h3>Price</h3><div class="gauge"><div class="needle" style="transform:rotate({{ price_angle }}deg)"></div><div class="center"></div><div class="score">{{ price_meter }}</div></div></div>
+<div class="card meterbox"><h3>News</h3><div class="gauge"><div class="needle" style="transform:rotate({{ news_angle }}deg)"></div><div class="center"></div><div class="score">{{ news_meter }}</div></div></div>
 </div>
 
 <div class="signal" style="background:{{ color }}">{{ final_decision }}</div>
 
 <div class="card">
 <div class="grid">
-<div class="box"><div class="label">Price Up</div><div class="val green">+{{ total_price_up }}</div></div>
-<div class="box"><div class="label">Price Down</div><div class="val red">{{ total_price_down }}</div></div>
 <div class="box"><div class="label">Net Price</div><div class="val">{{ net_price_change }}</div></div>
 <div class="box"><div class="label">Net Weight Effect</div><div class="val">{{ net_effect }}</div></div>
-<div class="box"><div class="label">Positive Effect</div><div class="val green">+{{ positive_effect }}</div></div>
-<div class="box"><div class="label">Negative Effect</div><div class="val red">{{ negative_effect }}</div></div>
+<div class="box"><div class="label">News Score</div><div class="val">{{ news_meter }}</div></div>
+<div class="box"><div class="label">Final Score</div><div class="val">{{ final_score }}</div></div>
 <div class="box"><div class="label">Green / Red</div><div class="val"><span class="green">{{ green }}</span> / <span class="red">{{ red }}</span></div></div>
-<div class="box"><div class="label">Buy / Sell Pressure</div><div class="val"><span class="green">{{ buy_pressure }}%</span> / <span class="red">{{ sell_pressure }}%</span></div></div>
+<div class="box"><div class="label">Buy / Sell</div><div class="val"><span class="green">{{ buy_pressure }}%</span> / <span class="red">{{ sell_pressure }}%</span></div></div>
 </div>
 </div>
 
 <div class="card">
-<h3>All 50 Stocks</h3>
-<table>
-<tr><th>Stock</th><th>Price</th><th>₹</th><th>%</th><th>Wt</th><th>Effect</th></tr>
-{{ rows }}
-</table>
+<h3>News Impact</h3>
+<div>{{ news_rows }}</div>
 </div>
 
-<p class="small">Auto refresh 5 sec | Updated: {{ time }}</p>
-</body>
-</html>
+<div class="card">
+<h3>All 50 Stocks</h3>
+<table><tr><th>Stock</th><th>Price</th><th>₹</th><th>%</th><th>Wt</th><th>Effect</th></tr>{{ rows }}</table>
+</div>
+
+<p class="small">Auto refresh 60 sec | Updated: {{ time }}</p>
+</body></html>
 """
+
+def fetch_news():
+    queries = [
+        "Nifty 50 market news India",
+        "RBI policy stock market India",
+        "FII DII data Nifty",
+        "crude oil rupee Nifty impact",
+        "HDFC Bank Reliance ICICI Bank Nifty news"
+    ]
+    titles = []
+    for q in queries:
+        try:
+            url = "https://news.google.com/rss/search?q=" + quote_plus(q) + "&hl=en-IN&gl=IN&ceid=IN:en"
+            r = requests.get(url, timeout=6, headers={"User-Agent":"Mozilla/5.0"})
+            root = ET.fromstring(r.content)
+            for item in root.findall(".//item")[:2]:
+                title = item.findtext("title", "")
+                link = item.findtext("link", "#")
+                if title and title not in [x["title"] for x in titles]:
+                    titles.append({"title": title, "link": link})
+        except:
+            pass
+    return titles[:8]
+
+def news_score(news):
+    bullish = ["rises","rise","gain","gains","higher","surge","rally","positive","buying","cuts","rate cut","oil falls","crude falls","rupee gains","strong"]
+    bearish = ["falls","fall","lower","slump","selloff","selling","weak","inflation","rate hike","oil rises","crude rises","war","tension","fii selling"]
+    score = 50
+    for n in news:
+        t = n["title"].lower()
+        for w in bullish:
+            if w in t: score += 4
+        for w in bearish:
+            if w in t: score -= 4
+    return max(0, min(100, score))
+
+def make_news_rows(news):
+    if not news:
+        return Markup("<div class='newsitem'>News not loaded.</div>")
+    out = ""
+    for n in news:
+        out += f"<div class='newsitem'>• <a href='{n['link']}' target='_blank'>{n['title']}</a></div>"
+    return Markup(out)
 
 def make_table(rows):
     html = ""
@@ -139,73 +160,64 @@ def home():
         effect = round(wt * pct,2)
 
         if rupee > 0:
-            green += 1
-            total_price_up += rupee
-            positive_effect += effect
+            green += 1; total_price_up += rupee; positive_effect += effect
         elif rupee < 0:
-            red += 1
-            total_price_down += rupee
-            negative_effect += effect
+            red += 1; total_price_down += rupee; negative_effect += effect
 
         rows.append({"symbol":symbol,"price":price,"rupee":rupee,"pct":pct,"weight":wt,"effect":effect})
 
     total_price_up = round(total_price_up,2)
     total_price_down = round(total_price_down,2)
     net_price_change = round(total_price_up + total_price_down,2)
-
     positive_effect = round(positive_effect,2)
     negative_effect = round(negative_effect,2)
     net_effect = round(positive_effect + negative_effect,2)
 
-    total_effect_abs = positive_effect + abs(negative_effect)
-    weight_meter = round((positive_effect / total_effect_abs) * 100,1) if total_effect_abs > 0 else 50
+    weight_meter = round((positive_effect / (positive_effect + abs(negative_effect))) * 100,1) if (positive_effect + abs(negative_effect)) > 0 else 50
+    price_meter = round((total_price_up / (total_price_up + abs(total_price_down))) * 100,1) if (total_price_up + abs(total_price_down)) > 0 else 50
 
-    total_price_abs = total_price_up + abs(total_price_down)
-    price_meter = round((total_price_up / total_price_abs) * 100,1) if total_price_abs > 0 else 50
+    news = fetch_news()
+    nscore = news_score(news)
+
+    final_score = round((weight_meter * 0.55) + (price_meter * 0.25) + (nscore * 0.20),1)
 
     weight_angle = round(-90 + weight_meter * 1.8,1)
     price_angle = round(-90 + price_meter * 1.8,1)
+    news_angle = round(-90 + nscore * 1.8,1)
 
-    buy_pressure = weight_meter
-    sell_pressure = round(100 - weight_meter,1)
+    buy_pressure = final_score
+    sell_pressure = round(100 - final_score,1)
 
-    if weight_meter >= 70 and price_meter >= 55:
-        final_decision = "STRONG BUY / CALL SIDE"
-        color = "#d9fbe6"
-    elif weight_meter >= 60:
-        final_decision = "BUY SIDE WATCH"
-        color = "#fff3cd"
-    elif weight_meter <= 30 and price_meter <= 45:
-        final_decision = "STRONG SELL / PUT SIDE"
-        color = "#ffe1e1"
-    elif weight_meter <= 40:
-        final_decision = "SELL SIDE WATCH"
-        color = "#fff3cd"
+    if final_score >= 70:
+        final_decision, color = "STRONG BUY / CALL SIDE", "#d9fbe6"
+    elif final_score >= 60:
+        final_decision, color = "BUY SIDE WATCH", "#fff3cd"
+    elif final_score <= 30:
+        final_decision, color = "STRONG SELL / PUT SIDE", "#ffe1e1"
+    elif final_score <= 40:
+        final_decision, color = "SELL SIDE WATCH", "#fff3cd"
     else:
-        final_decision = "NO TRADE / SIDEWAYS"
-        color = "#fff3cd"
-
-    rows_sorted = sorted(rows, key=lambda x:x["effect"], reverse=True)
+        final_decision, color = "NO TRADE / SIDEWAYS", "#fff3cd"
 
     return render_template_string(
         HTML,
         nifty_price=nifty_price,
         weight_meter=weight_meter,
         price_meter=price_meter,
+        news_meter=nscore,
+        final_score=final_score,
         weight_angle=weight_angle,
         price_angle=price_angle,
+        news_angle=news_angle,
         final_decision=final_decision,
         color=color,
-        total_price_up=total_price_up,
-        total_price_down=total_price_down,
         net_price_change=net_price_change,
-        positive_effect=positive_effect,
-        negative_effect=negative_effect,
         net_effect=net_effect,
         green=green,
         red=red,
         buy_pressure=buy_pressure,
         sell_pressure=sell_pressure,
-        rows=make_table(rows_sorted),
+        news_rows=make_news_rows(news),
+        rows=make_table(sorted(rows, key=lambda x:x["effect"], reverse=True)),
         time=datetime.now().strftime("%d-%m-%Y %H:%M:%S")
     )
