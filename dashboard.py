@@ -25,8 +25,17 @@ body{font-family:Arial;background:#f4f6f8;margin:0;padding:8px}
 .card{background:white;padding:12px;margin:7px;border-radius:14px;box-shadow:0 2px 5px #ddd}
 .signal{padding:17px;border-radius:16px;text-align:center;font-size:24px;font-weight:bold;margin:7px}
 .big{font-size:24px;font-weight:bold}.green{color:green;font-weight:bold}.red{color:red;font-weight:bold}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}.box{background:#f8f9fa;border-radius:12px;padding:9px;text-align:center}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.box{background:#f8f9fa;border-radius:12px;padding:9px;text-align:center}
 .label{font-size:12px;color:#555}.val{font-size:19px;font-weight:bold}
+.meters{display:flex;gap:7px}
+.meterbox{flex:1;text-align:center}
+.gauge{width:150px;height:95px;margin:4px auto;position:relative;overflow:hidden}
+.gauge:before{content:"";position:absolute;left:10px;top:10px;width:130px;height:130px;border-radius:50%;background:conic-gradient(from 270deg,#d93025 0deg 80deg,#fbbc04 80deg 100deg,#0a9f45 100deg 180deg,transparent 180deg 360deg)}
+.gauge:after{content:"";position:absolute;left:33px;top:33px;width:84px;height:84px;background:white;border-radius:50%}
+.needle{position:absolute;left:73px;top:72px;width:4px;height:55px;background:#111;transform-origin:2px 2px;z-index:3}
+.center{position:absolute;left:66px;top:65px;width:18px;height:18px;background:#111;border-radius:50%;z-index:4}
+.score{position:absolute;left:0;right:0;top:54px;text-align:center;font-size:22px;font-weight:bold;z-index:5}
 table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:6px;border-bottom:1px solid #ddd;text-align:left}
 .news{font-size:13px;margin:5px 0}.small{text-align:center;color:#555;font-size:12px}
 </style></head><body>
@@ -34,14 +43,27 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:6px;borde
 <div class="card">NIFTY LIVE: <span class="big">{{ nifty_price }}</span></div>
 <div class="signal" style="background:{{ color }}">{{ decision }}</div>
 
+<div class="meters">
+<div class="card meterbox"><h3>Weight</h3><div class="gauge"><div class="needle" style="transform:rotate({{ weight_angle }}deg)"></div><div class="center"></div><div class="score">{{ weight_score }}</div></div></div>
+<div class="card meterbox"><h3>Price</h3><div class="gauge"><div class="needle" style="transform:rotate({{ price_angle }}deg)"></div><div class="center"></div><div class="score">{{ price_score }}</div></div></div>
+</div>
+
 <div class="card">
 <div class="grid">
+<div class="box"><div class="label">Plus Stocks</div><div class="val green">{{ green }}</div></div>
+<div class="box"><div class="label">Minus Stocks</div><div class="val red">{{ red }}</div></div>
+
+<div class="box"><div class="label">Total ₹ Plus</div><div class="val green">+{{ total_plus }}</div></div>
+<div class="box"><div class="label">Total ₹ Minus</div><div class="val red">{{ total_minus }}</div></div>
+
+<div class="box"><div class="label">Net ₹ Change</div><div class="val">{{ net_price }}</div></div>
 <div class="box"><div class="label">Market Power</div><div class="val">{{ market_power }}/100</div></div>
-<div class="box"><div class="label">Confidence</div><div class="val">{{ confidence }}%</div></div>
-<div class="box"><div class="label">Weight Effect</div><div class="val">{{ net_effect }}</div></div>
-<div class="box"><div class="label">Price Effect</div><div class="val">{{ net_price }}</div></div>
+
+<div class="box"><div class="label">Weight Plus</div><div class="val green">+{{ weight_plus }}</div></div>
+<div class="box"><div class="label">Weight Minus</div><div class="val red">{{ weight_minus }}</div></div>
+
+<div class="box"><div class="label">Net Weight Effect</div><div class="val">{{ net_effect }}</div></div>
 <div class="box"><div class="label">News Effect</div><div class="val">{{ news_effect }}</div></div>
-<div class="box"><div class="label">Green / Red</div><div class="val"><span class="green">{{ green }}</span> / <span class="red">{{ red }}</span></div></div>
 </div>
 </div>
 
@@ -131,7 +153,8 @@ def home():
         return "Upstox API Error: " + str(e)
 
     green = red = 0
-    pos = neg = rup_up = rup_down = 0
+    weight_plus = weight_minus = 0
+    total_plus = total_minus = 0
     rows = []
 
     for s in q.values():
@@ -144,27 +167,37 @@ def home():
         effect = round(wt * pct,2)
 
         if rupee > 0:
-            green += 1; pos += effect; rup_up += rupee
+            green += 1
+            weight_plus += effect
+            total_plus += rupee
         elif rupee < 0:
-            red += 1; neg += effect; rup_down += rupee
+            red += 1
+            weight_minus += effect
+            total_minus += rupee
 
         rows.append({"symbol":symbol,"price":price,"rupee":rupee,"pct":pct,"weight":wt,"effect":effect})
 
-    pos = round(pos,2); neg = round(neg,2)
-    net_effect = round(pos + neg,2)
-    net_price = round(rup_up + rup_down,2)
+    weight_plus = round(weight_plus,2)
+    weight_minus = round(weight_minus,2)
+    net_effect = round(weight_plus + weight_minus,2)
 
-    total_abs = pos + abs(neg)
-    weight_score = round((pos / total_abs) * 100,1) if total_abs > 0 else 50
+    total_plus = round(total_plus,2)
+    total_minus = round(total_minus,2)
+    net_price = round(total_plus + total_minus,2)
 
-    price_abs = rup_up + abs(rup_down)
-    price_score = round((rup_up / price_abs) * 100,1) if price_abs > 0 else 50
+    weight_abs = weight_plus + abs(weight_minus)
+    weight_score = round((weight_plus / weight_abs) * 100,1) if weight_abs > 0 else 50
+
+    price_abs = total_plus + abs(total_minus)
+    price_score = round((total_plus / price_abs) * 100,1) if price_abs > 0 else 50
 
     news_effect, news_rows = calc_news(fetch_news())
     news_score = 50 + news_effect
 
-    market_power = round((weight_score * 0.6) + (price_score * 0.25) + (news_score * 0.15),1)
-    confidence = round(abs(market_power - 50) * 2,1)
+    market_power = round((weight_score * 0.60) + (price_score * 0.25) + (news_score * 0.15),1)
+
+    weight_angle = round(-90 + weight_score * 1.8,1)
+    price_angle = round(-90 + price_score * 1.8,1)
 
     if market_power >= 70:
         decision, color = "✅ CALL BUY - STRONG BULLISH", "#d9fbe6"
@@ -186,12 +219,19 @@ def home():
         decision=decision,
         color=color,
         market_power=market_power,
-        confidence=confidence,
-        net_effect=net_effect,
-        net_price=net_price,
-        news_effect=news_effect,
         green=green,
         red=red,
+        total_plus=total_plus,
+        total_minus=total_minus,
+        net_price=net_price,
+        weight_plus=weight_plus,
+        weight_minus=weight_minus,
+        net_effect=net_effect,
+        weight_score=weight_score,
+        price_score=price_score,
+        weight_angle=weight_angle,
+        price_angle=price_angle,
+        news_effect=news_effect,
         news_rows=news_rows,
         drivers=make_rows(drivers_sorted, True),
         rows=make_rows(all_sorted),
