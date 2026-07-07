@@ -30,12 +30,7 @@ def oi_chg(md):
 def expiry():
     e=os.environ.get("EXPIRY_DATE")
     if e: return e
-    r=requests.get(
-        "https://api.upstox.com/v2/option/contract",
-        headers=h(),
-        params={"instrument_key":UNDERLYING},
-        timeout=10
-    ).json()
+    r=requests.get("https://api.upstox.com/v2/option/contract",headers=h(),params={"instrument_key":UNDERLYING},timeout=10).json()
     ex=sorted(list(set([x.get("expiry") for x in r.get("data",[]) if x.get("expiry")])))
     if not ex: raise Exception("EXPIRY_DATE add karo")
     return ex[0]
@@ -46,23 +41,10 @@ def api():
         return jsonify({"error":"UPSTOX_TOKEN missing"})
 
     try:
-        l=requests.get(
-            "https://api.upstox.com/v2/market-quote/ltp",
-            headers=h(),
-            params={"instrument_key":UNDERLYING},
-            timeout=10
-        ).json()
+        l=requests.get("https://api.upstox.com/v2/market-quote/ltp",headers=h(),params={"instrument_key":UNDERLYING},timeout=10).json()
         nifty=float(l["data"]["NSE_INDEX:Nifty 50"]["last_price"])
-
         exp=expiry()
-
-        oc=requests.get(
-            "https://api.upstox.com/v2/option/chain",
-            headers=h(),
-            params={"instrument_key":UNDERLYING,"expiry_date":exp},
-            timeout=15
-        ).json()
-
+        oc=requests.get("https://api.upstox.com/v2/option/chain",headers=h(),params={"instrument_key":UNDERLYING,"expiry_date":exp},timeout=15).json()
         data=oc.get("data",[])
     except Exception as e:
         return jsonify({"error":str(e)})
@@ -72,8 +54,8 @@ def api():
     high=atm+AROUND_STRIKES*STRIKE_STEP
 
     rows=[]
-    total_call_oi=total_put_oi=0
-    total_call_chg=total_put_chg=0
+    sum_call_total=0
+    sum_put_total=0
 
     for x in data:
         strike=int(float(x.get("strike_price",0)))
@@ -83,54 +65,72 @@ def api():
         c=x.get("call_options",{}).get("market_data",{})
         p=x.get("put_options",{}).get("market_data",{})
 
-        coi=float(c.get("oi",0) or 0)
-        poi=float(p.get("oi",0) or 0)
-        cchg=oi_chg(c)
-        pchg=oi_chg(p)
+        call_oi=float(c.get("oi",0) or 0)
+        put_oi=float(p.get("oi",0) or 0)
+        call_chg=oi_chg(c)
+        put_chg=oi_chg(p)
 
-        strike_total_oi = coi + poi
-        strike_total_chg = cchg + pchg
+        call_total=call_oi + call_chg
+        put_total=put_oi + put_chg
+        diff=put_total - call_total
 
-        total_call_oi += coi
-        total_put_oi += poi
-        total_call_chg += cchg
-        total_put_chg += pchg
+        sum_call_total += call_total
+        sum_put_total += put_total
 
         rows.append({
             "strike":strike,
             "atm":strike==atm,
-            "coi":fmt(coi),
-            "cchg":fmt(cchg),
-            "pchg":fmt(pchg),
-            "poi":fmt(poi),
-            "total_oi":fmt(strike_total_oi),
-            "total_chg":fmt(strike_total_chg),
-            "rc":cchg,
-            "rp":pchg,
-            "rt":strike_total_chg
+            "call_oi_raw":call_oi,
+            "call_chg_raw":call_chg,
+            "put_oi_raw":put_oi,
+            "put_chg_raw":put_chg,
+            "call_oi":fmt(call_oi),
+            "call_chg":fmt(call_chg),
+            "call_total":fmt(call_total),
+            "put_oi":fmt(put_oi),
+            "put_chg":fmt(put_chg),
+            "put_total":fmt(put_total),
+            "diff":fmt(diff),
+            "raw_diff":diff
         })
 
     rows=sorted(rows,key=lambda x:x["strike"])
 
-    pcr=round(total_put_oi/total_call_oi,2) if total_call_oi else 0
+    if rows:
+        max_call_oi=max([r["call_oi_raw"] for r in rows])
+        max_call_chg=max([r["call_chg_raw"] for r in rows])
+        max_put_oi=max([r["put_oi_raw"] for r in rows])
+        max_put_chg=max([r["put_chg_raw"] for r in rows])
+    else:
+        max_call_oi=max_call_chg=max_put_oi=max_put_chg=0
 
-    if total_put_chg > total_call_chg:
-        decision="🟢 PUT CHANGE વધારે - CALL SIDE WATCH"
+    for r in rows:
+        r["max_call_oi"] = r["call_oi_raw"] == max_call_oi and max_call_oi > 0
+        r["max_call_chg"] = r["call_chg_raw"] == max_call_chg and max_call_chg > 0
+        r["max_put_oi"] = r["put_oi_raw"] == max_put_oi and max_put_oi > 0
+        r["max_put_chg"] = r["put_chg_raw"] == max_put_chg and max_put_chg > 0
+
+    final_diff=sum_put_total-sum_call_total
+
+    if final_diff > 0:
+        decision="🟢 PUT TOTAL વધારે - CALL SIDE WATCH"
         color="#d9fbe6"
-    elif total_call_chg > total_put_chg:
-        decision="🔴 CALL CHANGE વધારે - PUT SIDE WATCH"
+    elif final_diff < 0:
+        decision="🔴 CALL TOTAL વધારે - PUT SIDE WATCH"
         color="#ffe1e1"
     else:
-        decision="🟡 MIXED / WAIT"
+        decision="🟡 SAME / WAIT"
         color="#fff3cd"
 
     return jsonify({
         "nifty":nifty,
         "atm":atm,
         "expiry":exp,
-        "pcr":pcr,
         "decision":decision,
         "color":color,
+        "sum_call_total":fmt(sum_call_total),
+        "sum_put_total":fmt(sum_put_total),
+        "final_diff":fmt(final_diff),
         "rows":rows,
         "time":datetime.now().strftime("%H:%M:%S")
     })
@@ -139,7 +139,7 @@ HTML="""
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Nifty Strike Total OI</title>
+<title>Nifty OI Total</title>
 <style>
 body{font-family:Arial;background:#f4f6f8;margin:0;padding:8px}
 .card{background:white;padding:12px;margin:7px;border-radius:14px;box-shadow:0 2px 5px #ddd}
@@ -152,8 +152,9 @@ body{font-family:Arial;background:#f4f6f8;margin:0;padding:8px}
 .green{color:green;font-weight:bold}
 .red{color:red;font-weight:bold}
 .blue{color:#064fcb;font-weight:bold}
-table{width:100%;border-collapse:collapse;font-size:11px;background:white}
-td,th{padding:6px;border-bottom:1px solid #ddd;text-align:right}
+.high{background:#d9fbe6!important;color:green!important;font-weight:bold;border-radius:6px}
+table{width:100%;border-collapse:collapse;font-size:10.5px;background:white}
+td,th{padding:5px;border-bottom:1px solid #ddd;text-align:right}
 td:first-child,th:first-child{text-align:center}
 .atm{background:#fff3cd;font-weight:bold}
 .small{text-align:center;color:#555;font-size:12px}
@@ -167,24 +168,27 @@ td:first-child,th:first-child{text-align:center}
 <div class="card">
 <div class="grid">
 <div class="box"><div class="label">ATM Strike</div><div class="val" id="atm">-</div></div>
-<div class="box"><div class="label">PCR</div><div class="val" id="pcr">-</div></div>
 <div class="box"><div class="label">Expiry</div><div class="val" id="expiry">-</div></div>
+<div class="box"><div class="label">Call Total Sum</div><div class="val red" id="sum_call_total">-</div></div>
+<div class="box"><div class="label">Put Total Sum</div><div class="val green" id="sum_put_total">-</div></div>
+<div class="box"><div class="label">Put - Call Difference</div><div class="val blue" id="final_diff">-</div></div>
 <div class="box"><div class="label">Updated</div><div class="val" id="time">-</div></div>
 </div>
 </div>
 
 <div class="card">
-<h3>ATM ± 10 Strike OI With Total</h3>
+<h3>ATM ± 10 Strike OI Total</h3>
 <table>
 <thead>
 <tr>
 <th>Strike</th>
 <th>Call OI</th>
 <th>Call Chg</th>
-<th>Put Chg</th>
+<th>Call Total</th>
 <th>Put OI</th>
-<th>Total OI</th>
-<th>Total Chg</th>
+<th>Put Chg</th>
+<th>Put Total</th>
+<th>Diff</th>
 </tr>
 </thead>
 <tbody id="tbody"></tbody>
@@ -206,23 +210,26 @@ async function loadData(){
 
     document.getElementById('nifty').innerText=d.nifty;
     document.getElementById('atm').innerText=d.atm;
-    document.getElementById('pcr').innerText=d.pcr;
     document.getElementById('expiry').innerText=d.expiry;
-    document.getElementById('time').innerText=d.time;
     document.getElementById('decision').innerText=d.decision;
     document.getElementById('decision').style.background=d.color;
+    document.getElementById('sum_call_total').innerText=d.sum_call_total;
+    document.getElementById('sum_put_total').innerText=d.sum_put_total;
+    document.getElementById('final_diff').innerText=d.final_diff;
+    document.getElementById('time').innerText=d.time;
 
     let html='';
     d.rows.forEach(x=>{
         html+=`
         <tr class="${x.atm?'atm':''}">
             <td>${x.strike}</td>
-            <td class="red">${x.coi}</td>
-            <td class="${x.rc<0?'green':'red'}">${x.cchg}</td>
-            <td class="${x.rp>0?'green':'red'}">${x.pchg}</td>
-            <td class="green">${x.poi}</td>
-            <td class="blue">${x.total_oi}</td>
-            <td class="${x.rt>=0?'blue':'red'}">${x.total_chg}</td>
+            <td class="${x.max_call_oi?'high':'red'}">${x.call_oi}</td>
+            <td class="${x.max_call_chg?'high':(x.call_chg_raw<0?'green':'red')}">${x.call_chg}</td>
+            <td class="red">${x.call_total}</td>
+            <td class="${x.max_put_oi?'high':'green'}">${x.put_oi}</td>
+            <td class="${x.max_put_chg?'high':(x.put_chg_raw>0?'green':'red')}">${x.put_chg}</td>
+            <td class="green">${x.put_total}</td>
+            <td class="${x.raw_diff>=0?'green':'red'}">${x.diff}</td>
         </tr>`;
     });
 
