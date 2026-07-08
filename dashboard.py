@@ -4,105 +4,141 @@ from datetime import datetime
 
 app = Flask(__name__)
 TOKEN = os.environ.get("UPSTOX_TOKEN")
+
 UNDERLYING = "NSE_INDEX|Nifty 50"
 STRIKE_STEP = 50
 AROUND_STRIKES = 10
 
 def h():
-    return {"Accept":"application/json","Authorization":"Bearer "+TOKEN}
+    return {"Accept": "application/json", "Authorization": "Bearer " + TOKEN}
 
 def fmt(n):
     try:
-        n=float(n); s="-" if n<0 else ""; n=abs(n)
-        if n>=10000000: return s+str(round(n/10000000,2))+"Cr"
-        if n>=100000: return s+str(round(n/100000,2))+"L"
-        if n>=1000: return s+str(round(n/1000,1))+"K"
-        return s+str(int(n))
+        n = float(n)
+        sign = "-" if n < 0 else ""
+        n = abs(n)
+        if n >= 10000000: return sign + str(round(n/10000000, 2)) + "Cr"
+        if n >= 100000: return sign + str(round(n/100000, 2)) + "L"
+        if n >= 1000: return sign + str(round(n/1000, 1)) + "K"
+        return sign + str(int(n))
     except:
         return "-"
 
 def oi_chg(md):
-    for k in ["oi_day_change","oi_change","change_oi","oi_change_value"]:
-        if md.get(k) not in [None,""]:
-            return float(md.get(k) or 0)
+    for k in ["oi_day_change", "oi_change", "change_oi", "oi_change_value", "change_in_oi"]:
+        v = md.get(k)
+        if v not in [None, ""]:
+            return float(v or 0)
+
+    oi = float(md.get("oi", 0) or 0)
+    prev = float(md.get("previous_oi", 0) or md.get("prev_oi", 0) or md.get("close_oi", 0) or 0)
+
+    if prev:
+        return oi - prev
+
     return 0
 
-def expiry():
-    e=os.environ.get("EXPIRY_DATE")
-    if e: return e
-    r=requests.get("https://api.upstox.com/v2/option/contract",headers=h(),params={"instrument_key":UNDERLYING},timeout=10).json()
-    ex=sorted(list(set([x.get("expiry") for x in r.get("data",[]) if x.get("expiry")])))
-    if not ex: raise Exception("EXPIRY_DATE add karo")
+def get_expiry():
+    e = os.environ.get("EXPIRY_DATE")
+    if e:
+        return e
+
+    r = requests.get(
+        "https://api.upstox.com/v2/option/contract",
+        headers=h(),
+        params={"instrument_key": UNDERLYING},
+        timeout=10
+    ).json()
+
+    ex = sorted(list(set([x.get("expiry") for x in r.get("data", []) if x.get("expiry")])))
+    if not ex:
+        raise Exception("EXPIRY_DATE Render Environment ma add karo")
     return ex[0]
 
 @app.route("/api")
 def api():
     if not TOKEN:
-        return jsonify({"error":"UPSTOX_TOKEN missing"})
+        return jsonify({"error": "UPSTOX_TOKEN missing"})
 
     try:
-        l=requests.get("https://api.upstox.com/v2/market-quote/ltp",headers=h(),params={"instrument_key":UNDERLYING},timeout=10).json()
-        nifty=float(l["data"]["NSE_INDEX:Nifty 50"]["last_price"])
-        exp=expiry()
-        oc=requests.get("https://api.upstox.com/v2/option/chain",headers=h(),params={"instrument_key":UNDERLYING,"expiry_date":exp},timeout=15).json()
-        data=oc.get("data",[])
+        ltp = requests.get(
+            "https://api.upstox.com/v2/market-quote/ltp",
+            headers=h(),
+            params={"instrument_key": UNDERLYING},
+            timeout=10
+        ).json()
+        nifty = float(ltp["data"]["NSE_INDEX:Nifty 50"]["last_price"])
+
+        expiry = get_expiry()
+
+        oc = requests.get(
+            "https://api.upstox.com/v2/option/chain",
+            headers=h(),
+            params={"instrument_key": UNDERLYING, "expiry_date": expiry},
+            timeout=15
+        ).json()
+
+        data = oc.get("data", [])
     except Exception as e:
-        return jsonify({"error":str(e)})
+        return jsonify({"error": str(e)})
 
-    atm=round(nifty/STRIKE_STEP)*STRIKE_STEP
-    low=atm-AROUND_STRIKES*STRIKE_STEP
-    high=atm+AROUND_STRIKES*STRIKE_STEP
+    atm = round(nifty / STRIKE_STEP) * STRIKE_STEP
+    low = atm - AROUND_STRIKES * STRIKE_STEP
+    high = atm + AROUND_STRIKES * STRIKE_STEP
 
-    rows=[]
-    sum_call_total=0
-    sum_put_total=0
+    rows = []
+    sum_call_total = 0
+    sum_put_total = 0
 
     for x in data:
-        strike=int(float(x.get("strike_price",0)))
-        if strike<low or strike>high:
+        strike = int(float(x.get("strike_price", 0)))
+        if strike < low or strike > high:
             continue
 
-        c=x.get("call_options",{}).get("market_data",{})
-        p=x.get("put_options",{}).get("market_data",{})
+        c = x.get("call_options", {}).get("market_data", {})
+        p = x.get("put_options", {}).get("market_data", {})
 
-        call_oi=float(c.get("oi",0) or 0)
-        put_oi=float(p.get("oi",0) or 0)
-        call_chg=oi_chg(c)
-        put_chg=oi_chg(p)
+        call_oi = float(c.get("oi", 0) or 0)
+        put_oi = float(p.get("oi", 0) or 0)
 
-        call_total=call_oi + call_chg
-        put_total=put_oi + put_chg
-        diff=put_total - call_total
+        call_chg = oi_chg(c)
+        put_chg = oi_chg(p)
+
+        call_total = call_oi + call_chg
+        put_total = put_oi + put_chg
+        diff = put_total - call_total
 
         sum_call_total += call_total
         sum_put_total += put_total
 
         rows.append({
-            "strike":strike,
-            "atm":strike==atm,
-            "call_oi_raw":call_oi,
-            "call_chg_raw":call_chg,
-            "put_oi_raw":put_oi,
-            "put_chg_raw":put_chg,
-            "call_oi":fmt(call_oi),
-            "call_chg":fmt(call_chg),
-            "call_total":fmt(call_total),
-            "put_oi":fmt(put_oi),
-            "put_chg":fmt(put_chg),
-            "put_total":fmt(put_total),
-            "diff":fmt(diff),
-            "raw_diff":diff
+            "strike": strike,
+            "atm": strike == atm,
+
+            "call_oi_raw": call_oi,
+            "call_chg_raw": call_chg,
+            "put_oi_raw": put_oi,
+            "put_chg_raw": put_chg,
+            "diff_raw": diff,
+
+            "call_oi": fmt(call_oi),
+            "call_chg": fmt(call_chg),
+            "call_total": fmt(call_total),
+            "put_oi": fmt(put_oi),
+            "put_chg": fmt(put_chg),
+            "put_total": fmt(put_total),
+            "diff": fmt(diff)
         })
 
-    rows=sorted(rows,key=lambda x:x["strike"])
+    rows = sorted(rows, key=lambda x: x["strike"])
 
     if rows:
-        max_call_oi=max([r["call_oi_raw"] for r in rows])
-        max_call_chg=max([r["call_chg_raw"] for r in rows])
-        max_put_oi=max([r["put_oi_raw"] for r in rows])
-        max_put_chg=max([r["put_chg_raw"] for r in rows])
+        max_call_oi = max(r["call_oi_raw"] for r in rows)
+        max_call_chg = max(r["call_chg_raw"] for r in rows)
+        max_put_oi = max(r["put_oi_raw"] for r in rows)
+        max_put_chg = max(r["put_chg_raw"] for r in rows)
     else:
-        max_call_oi=max_call_chg=max_put_oi=max_put_chg=0
+        max_call_oi = max_call_chg = max_put_oi = max_put_chg = 0
 
     for r in rows:
         r["max_call_oi"] = r["call_oi_raw"] == max_call_oi and max_call_oi > 0
@@ -110,32 +146,32 @@ def api():
         r["max_put_oi"] = r["put_oi_raw"] == max_put_oi and max_put_oi > 0
         r["max_put_chg"] = r["put_chg_raw"] == max_put_chg and max_put_chg > 0
 
-    final_diff=sum_put_total-sum_call_total
+    final_diff = sum_put_total - sum_call_total
 
     if final_diff > 0:
-        decision="🟢 PUT TOTAL વધારે - CALL SIDE WATCH"
-        color="#d9fbe6"
+        decision = "🟢 PUT TOTAL વધારે - CALL SIDE WATCH"
+        color = "#d9fbe6"
     elif final_diff < 0:
-        decision="🔴 CALL TOTAL વધારે - PUT SIDE WATCH"
-        color="#ffe1e1"
+        decision = "🔴 CALL TOTAL વધારે - PUT SIDE WATCH"
+        color = "#ffe1e1"
     else:
-        decision="🟡 SAME / WAIT"
-        color="#fff3cd"
+        decision = "🟡 SAME / WAIT"
+        color = "#fff3cd"
 
     return jsonify({
-        "nifty":nifty,
-        "atm":atm,
-        "expiry":exp,
-        "decision":decision,
-        "color":color,
-        "sum_call_total":fmt(sum_call_total),
-        "sum_put_total":fmt(sum_put_total),
-        "final_diff":fmt(final_diff),
-        "rows":rows,
-        "time":datetime.now().strftime("%H:%M:%S")
+        "nifty": nifty,
+        "atm": atm,
+        "expiry": expiry,
+        "decision": decision,
+        "color": color,
+        "sum_call_total": fmt(sum_call_total),
+        "sum_put_total": fmt(sum_put_total),
+        "final_diff": fmt(final_diff),
+        "rows": rows,
+        "time": datetime.now().strftime("%H:%M:%S")
     })
 
-HTML="""
+HTML = """
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -199,45 +235,45 @@ td:first-child,th:first-child{text-align:center}
 
 <script>
 async function loadData(){
-    let r=await fetch('/api');
-    let d=await r.json();
+    let r = await fetch('/api');
+    let d = await r.json();
 
     if(d.error){
-        document.getElementById('decision').innerText=d.error;
-        document.getElementById('decision').style.background='#ffe1e1';
+        document.getElementById('decision').innerText = d.error;
+        document.getElementById('decision').style.background = '#ffe1e1';
         return;
     }
 
-    document.getElementById('nifty').innerText=d.nifty;
-    document.getElementById('atm').innerText=d.atm;
-    document.getElementById('expiry').innerText=d.expiry;
-    document.getElementById('decision').innerText=d.decision;
-    document.getElementById('decision').style.background=d.color;
-    document.getElementById('sum_call_total').innerText=d.sum_call_total;
-    document.getElementById('sum_put_total').innerText=d.sum_put_total;
-    document.getElementById('final_diff').innerText=d.final_diff;
-    document.getElementById('time').innerText=d.time;
+    document.getElementById('nifty').innerText = d.nifty;
+    document.getElementById('atm').innerText = d.atm;
+    document.getElementById('expiry').innerText = d.expiry;
+    document.getElementById('decision').innerText = d.decision;
+    document.getElementById('decision').style.background = d.color;
+    document.getElementById('sum_call_total').innerText = d.sum_call_total;
+    document.getElementById('sum_put_total').innerText = d.sum_put_total;
+    document.getElementById('final_diff').innerText = d.final_diff;
+    document.getElementById('time').innerText = d.time;
 
-    let html='';
+    let html = '';
     d.rows.forEach(x=>{
-        html+=`
-        <tr class="${x.atm?'atm':''}">
+        html += `
+        <tr class="${x.atm ? 'atm' : ''}">
             <td>${x.strike}</td>
-            <td class="${x.max_call_oi?'high':'red'}">${x.call_oi}</td>
-            <td class="${x.max_call_chg?'high':(x.call_chg_raw<0?'green':'red')}">${x.call_chg}</td>
+            <td class="${x.max_call_oi ? 'high' : 'red'}">${x.call_oi}</td>
+            <td class="${x.max_call_chg ? 'high' : (x.call_chg_raw < 0 ? 'green' : 'red')}">${x.call_chg}</td>
             <td class="red">${x.call_total}</td>
-            <td class="${x.max_put_oi?'high':'green'}">${x.put_oi}</td>
-            <td class="${x.max_put_chg?'high':(x.put_chg_raw>0?'green':'red')}">${x.put_chg}</td>
+            <td class="${x.max_put_oi ? 'high' : 'green'}">${x.put_oi}</td>
+            <td class="${x.max_put_chg ? 'high' : (x.put_chg_raw > 0 ? 'green' : 'red')}">${x.put_chg}</td>
             <td class="green">${x.put_total}</td>
-            <td class="${x.raw_diff>=0?'green':'red'}">${x.diff}</td>
+            <td class="${x.diff_raw >= 0 ? 'green' : 'red'}">${x.diff}</td>
         </tr>`;
     });
 
-    document.getElementById('tbody').innerHTML=html;
+    document.getElementById('tbody').innerHTML = html;
 }
 
 loadData();
-setInterval(loadData,2000);
+setInterval(loadData, 2000);
 </script>
 
 </body>
