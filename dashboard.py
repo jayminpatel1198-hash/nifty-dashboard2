@@ -3,11 +3,11 @@ import requests, os
 from datetime import datetime
 
 app = Flask(__name__)
-
 TOKEN = os.environ.get("UPSTOX_TOKEN")
+
 UNDERLYING = "NSE_INDEX|Nifty 50"
 STRIKE_STEP = 50
-AROUND_STRIKES = 10
+AROUND_STRIKES = 5
 
 def headers():
     return {"Accept": "application/json", "Authorization": "Bearer " + TOKEN}
@@ -24,8 +24,8 @@ def fmt(n):
     except:
         return "-"
 
-def oi_chg(md):
-    for k in ["oi_day_change","oi_change","change_oi","oi_change_value","change_in_oi"]:
+def get_oi_change(md):
+    for k in ["oi_day_change", "oi_change", "change_oi", "oi_change_value", "change_in_oi"]:
         v = md.get(k)
         if v not in [None, ""]:
             return float(v or 0)
@@ -80,61 +80,55 @@ def api():
         return jsonify({"error": str(e)})
 
     atm = round(nifty / STRIKE_STEP) * STRIKE_STEP
-    low = atm - AROUND_STRIKES * STRIKE_STEP
-    high = atm + AROUND_STRIKES * STRIKE_STEP
+    low = atm - (AROUND_STRIKES * STRIKE_STEP)
+    high = atm + (AROUND_STRIKES * STRIKE_STEP)
 
     rows = []
-    total_call_oi = total_put_oi = 0
-    total_call_chg = total_put_chg = 0
-    total_call_total = total_put_total = 0
+    call_oi_sum = put_oi_sum = 0
+    call_chg_sum = put_chg_sum = 0
+    call_total_sum = put_total_sum = 0
 
     for x in data:
         strike = int(float(x.get("strike_price", 0)))
         if strike < low or strike > high:
             continue
 
-        c = x.get("call_options", {}).get("market_data", {})
-        p = x.get("put_options", {}).get("market_data", {})
+        call_md = x.get("call_options", {}).get("market_data", {})
+        put_md = x.get("put_options", {}).get("market_data", {})
 
-        call_oi = float(c.get("oi", 0) or 0)
-        put_oi = float(p.get("oi", 0) or 0)
+        call_oi = float(call_md.get("oi", 0) or 0)
+        put_oi = float(put_md.get("oi", 0) or 0)
 
-        call_chg = oi_chg(c)
-        put_chg = oi_chg(p)
+        call_chg = get_oi_change(call_md)
+        put_chg = get_oi_change(put_md)
 
         call_total = call_oi + call_chg
         put_total = put_oi + put_chg
         diff = put_total - call_total
 
-        total_call_oi += call_oi
-        total_put_oi += put_oi
-        total_call_chg += call_chg
-        total_put_chg += put_chg
-        total_call_total += call_total
-        total_put_total += put_total
+        call_oi_sum += call_oi
+        put_oi_sum += put_oi
+        call_chg_sum += call_chg
+        put_chg_sum += put_chg
+        call_total_sum += call_total
+        put_total_sum += put_total
 
         rows.append({
             "strike": strike,
             "atm": strike == atm,
-
             "call_oi_raw": call_oi,
             "call_chg_raw": call_chg,
             "call_total_raw": call_total,
-
             "put_oi_raw": put_oi,
             "put_chg_raw": put_chg,
             "put_total_raw": put_total,
-
             "diff_raw": diff,
-
             "call_oi": fmt(call_oi),
             "call_chg": fmt(call_chg),
             "call_total": fmt(call_total),
-
             "put_oi": fmt(put_oi),
             "put_chg": fmt(put_chg),
             "put_total": fmt(put_total),
-
             "diff": fmt(diff)
         })
 
@@ -146,60 +140,55 @@ def api():
     max_call_oi = max(r["call_oi_raw"] for r in rows)
     max_call_chg = max(r["call_chg_raw"] for r in rows)
     max_call_total = max(r["call_total_raw"] for r in rows)
-
     max_put_oi = max(r["put_oi_raw"] for r in rows)
     max_put_chg = max(r["put_chg_raw"] for r in rows)
     max_put_total = max(r["put_total_raw"] for r in rows)
-
-    strongest_bull = max(rows, key=lambda x: x["diff_raw"])
-    strongest_bear = min(rows, key=lambda x: x["diff_raw"])
 
     for r in rows:
         r["max_call_oi"] = r["call_oi_raw"] == max_call_oi and max_call_oi > 0
         r["max_call_chg"] = r["call_chg_raw"] == max_call_chg and max_call_chg > 0
         r["max_call_total"] = r["call_total_raw"] == max_call_total and max_call_total > 0
-
         r["max_put_oi"] = r["put_oi_raw"] == max_put_oi and max_put_oi > 0
         r["max_put_chg"] = r["put_chg_raw"] == max_put_chg and max_put_chg > 0
         r["max_put_total"] = r["put_total_raw"] == max_put_total and max_put_total > 0
 
-    pcr = round(total_put_oi / total_call_oi, 2) if total_call_oi else 0
-    final_diff = total_put_total - total_call_total
+    pcr = round(put_oi_sum / call_oi_sum, 2) if call_oi_sum else 0
+    diff_sum = put_total_sum - call_total_sum
 
     bull_score = 0
     bear_score = 0
     reasons = []
 
-    if total_put_chg > total_call_chg:
-        bull_score += 30
-        reasons.append("Put change વધારે છે એટલે support વધી શકે")
+    if put_chg_sum > call_chg_sum:
+        bull_score += 35
+        reasons.append("Put change વધારે છે એટલે support build થઈ રહ્યો છે")
     else:
-        bear_score += 30
-        reasons.append("Call change વધારે છે એટલે resistance વધી શકે")
+        bear_score += 35
+        reasons.append("Call change વધારે છે એટલે resistance build થઈ રહ્યો છે")
 
-    if final_diff > 0:
-        bull_score += 30
-        reasons.append("Put total Call total કરતા વધારે છે")
+    if diff_sum > 0:
+        bull_score += 35
+        reasons.append("Put total Call total કરતાં વધારે છે")
     else:
-        bear_score += 30
-        reasons.append("Call total Put total કરતા વધારે છે")
+        bear_score += 35
+        reasons.append("Call total Put total કરતાં વધારે છે")
 
     if pcr > 1:
-        bull_score += 20
+        bull_score += 15
         reasons.append("PCR 1 ઉપર છે")
     else:
-        bear_score += 20
+        bear_score += 15
         reasons.append("PCR 1 નીચે છે")
 
-    if strongest_bull["diff_raw"] > abs(strongest_bear["diff_raw"]):
-        bull_score += 20
-        reasons.append("Bullish strike pressure વધારે છે")
-    else:
-        bear_score += 20
-        reasons.append("Bearish strike pressure વધારે છે")
+    if put_total_sum > call_total_sum and put_chg_sum > 0:
+        bull_score += 15
+        reasons.append("Overall buyers side pressure છે")
+    elif call_total_sum > put_total_sum and call_chg_sum > 0:
+        bear_score += 15
+        reasons.append("Overall sellers side pressure છે")
 
-    total_score = bull_score + bear_score
-    market_score = round((bull_score / total_score) * 100, 1) if total_score else 50
+    total = bull_score + bear_score
+    market_score = round((bull_score / total) * 100, 1) if total else 50
     confidence = round(abs(market_score - 50) * 2, 1)
 
     if market_score >= 70:
@@ -223,27 +212,17 @@ def api():
         "atm": atm,
         "expiry": expiry,
         "pcr": pcr,
-
         "decision": decision,
         "color": color,
         "market_score": market_score,
         "confidence": confidence,
-
-        "total_call_oi": fmt(total_call_oi),
-        "total_call_chg": fmt(total_call_chg),
-        "total_call_total": fmt(total_call_total),
-
-        "total_put_oi": fmt(total_put_oi),
-        "total_put_chg": fmt(total_put_chg),
-        "total_put_total": fmt(total_put_total),
-
-        "final_diff": fmt(final_diff),
-
-        "strongest_bull_strike": strongest_bull["strike"],
-        "strongest_bull_val": fmt(strongest_bull["diff_raw"]),
-        "strongest_bear_strike": strongest_bear["strike"],
-        "strongest_bear_val": fmt(strongest_bear["diff_raw"]),
-
+        "call_oi_sum": fmt(call_oi_sum),
+        "call_chg_sum": fmt(call_chg_sum),
+        "call_total_sum": fmt(call_total_sum),
+        "put_oi_sum": fmt(put_oi_sum),
+        "put_chg_sum": fmt(put_chg_sum),
+        "put_total_sum": fmt(put_total_sum),
+        "diff_sum": fmt(diff_sum),
         "reasons": reasons[:4],
         "rows": rows,
         "time": datetime.now().strftime("%H:%M:%S")
@@ -253,26 +232,34 @@ HTML = """
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Nifty Ultra OI Dashboard</title>
+<title>Nifty Option Flow</title>
 <style>
-body{font-family:Arial;background:#f4f6f8;margin:0;padding:8px}
-.card{background:white;padding:12px;margin:7px;border-radius:14px;box-shadow:0 2px 5px #ddd}
-.big{font-size:24px;font-weight:bold}
-.signal{padding:15px;border-radius:14px;text-align:center;font-size:21px;font-weight:bold;margin:7px}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
-.box{background:#f8f9fa;border-radius:12px;padding:9px;text-align:center}
-.label{font-size:12px;color:#555}
+body{font-family:Arial;background:#f3f5f8;margin:0;padding:8px}
+.card{background:white;padding:12px;margin:8px;border-radius:16px;box-shadow:0 2px 6px #ddd}
+.big{font-size:23px;font-weight:bold}
+.signal{padding:14px;border-radius:16px;text-align:center;font-size:20px;font-weight:bold;margin:8px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.box{background:#f7f8fa;border-radius:14px;padding:10px;text-align:center}
+.label{font-size:12px;color:#666}
 .val{font-size:18px;font-weight:bold}
 .green{color:green;font-weight:bold}
 .red{color:red;font-weight:bold}
-.blue{color:#064fcb;font-weight:bold}
-.high{background:#d9fbe6!important;color:green!important;font-weight:bold;border-radius:6px}
-.atm{background:#fff3cd;font-weight:bold}
-table{width:100%;border-collapse:collapse;font-size:10px;background:white}
-td,th{padding:5px;border-bottom:1px solid #ddd;text-align:right}
+.blue{color:#0754c7;font-weight:bold}
+.high{background:#d9fbe6!important;color:green!important;font-weight:bold;border-radius:5px}
+.atm{background:#fff1bd!important;font-weight:bold}
+table{width:100%;border-collapse:collapse;font-size:10.8px;background:white}
+td,th{padding:6px 4px;border-bottom:1px solid #ddd;text-align:right}
 td:first-child,th:first-child{text-align:center}
-.reason{font-size:13px;margin:4px 0}
-.small{text-align:center;color:#555;font-size:12px}
+.reason{font-size:13px;margin:5px 0;line-height:1.35}
+.small{text-align:center;color:#666;font-size:12px}
+@media(max-width:420px){
+  body{padding:4px}
+  .card{margin:6px;padding:10px}
+  .signal{font-size:18px}
+  table{font-size:10px}
+  td,th{padding:5px 3px}
+  .val{font-size:16px}
+}
 </style>
 </head>
 <body>
@@ -290,24 +277,19 @@ td:first-child,th:first-child{text-align:center}
 </div>
 
 <div class="card">
-<h3>Call / Put Total Summary</h3>
+<h3>Overall Contract Flow</h3>
 <div class="grid">
-<div class="box"><div class="label">Call OI</div><div class="val red" id="total_call_oi">-</div></div>
-<div class="box"><div class="label">Put OI</div><div class="val green" id="total_put_oi">-</div></div>
-<div class="box"><div class="label">Call Change</div><div class="val red" id="total_call_chg">-</div></div>
-<div class="box"><div class="label">Put Change</div><div class="val green" id="total_put_chg">-</div></div>
-<div class="box"><div class="label">Call Total</div><div class="val red" id="total_call_total">-</div></div>
-<div class="box"><div class="label">Put Total</div><div class="val green" id="total_put_total">-</div></div>
-<div class="box"><div class="label">Put - Call Diff</div><div class="val blue" id="final_diff">-</div></div>
-<div class="box"><div class="label">Updated</div><div class="val" id="time">-</div></div>
-</div>
-</div>
+<div class="box"><div class="label">Call OI</div><div class="val red" id="call_oi_sum">-</div></div>
+<div class="box"><div class="label">Put OI</div><div class="val green" id="put_oi_sum">-</div></div>
 
-<div class="card">
-<h3>Money Shift</h3>
-<div class="grid">
-<div class="box"><div class="label">Bullish Strike</div><div class="val green"><span id="strongest_bull_strike">-</span><br><span id="strongest_bull_val"></span></div></div>
-<div class="box"><div class="label">Bearish Strike</div><div class="val red"><span id="strongest_bear_strike">-</span><br><span id="strongest_bear_val"></span></div></div>
+<div class="box"><div class="label">Call Change</div><div class="val red" id="call_chg_sum">-</div></div>
+<div class="box"><div class="label">Put Change</div><div class="val green" id="put_chg_sum">-</div></div>
+
+<div class="box"><div class="label">Call Total</div><div class="val red" id="call_total_sum">-</div></div>
+<div class="box"><div class="label">Put Total</div><div class="val green" id="put_total_sum">-</div></div>
+
+<div class="box"><div class="label">Put - Call Diff</div><div class="val blue" id="diff_sum">-</div></div>
+<div class="box"><div class="label">Updated</div><div class="val" id="time">-</div></div>
 </div>
 </div>
 
@@ -317,7 +299,7 @@ td:first-child,th:first-child{text-align:center}
 </div>
 
 <div class="card">
-<h3>ATM ± 10 Strike Ultra Table</h3>
+<h3>ATM ± 5 Strike Table</h3>
 <table>
 <thead>
 <tr>
@@ -351,37 +333,33 @@ async function loadData(){
 
         document.getElementById('nifty').innerText = d.nifty;
         document.getElementById('atm').innerText = d.atm;
-        document.getElementById('expiry').innerText = d.expiry;
         document.getElementById('pcr').innerText = d.pcr;
+        document.getElementById('expiry').innerText = d.expiry;
+        document.getElementById('time').innerText = d.time;
+
         document.getElementById('decision').innerText = d.decision;
         document.getElementById('decision').style.background = d.color;
         document.getElementById('market_score').innerText = d.market_score + "/100";
         document.getElementById('confidence').innerText = d.confidence + "%";
 
-        document.getElementById('total_call_oi').innerText = d.total_call_oi;
-        document.getElementById('total_call_chg').innerText = d.total_call_chg;
-        document.getElementById('total_call_total').innerText = d.total_call_total;
+        document.getElementById('call_oi_sum').innerText = d.call_oi_sum;
+        document.getElementById('call_chg_sum').innerText = d.call_chg_sum;
+        document.getElementById('call_total_sum').innerText = d.call_total_sum;
 
-        document.getElementById('total_put_oi').innerText = d.total_put_oi;
-        document.getElementById('total_put_chg').innerText = d.total_put_chg;
-        document.getElementById('total_put_total').innerText = d.total_put_total;
+        document.getElementById('put_oi_sum').innerText = d.put_oi_sum;
+        document.getElementById('put_chg_sum').innerText = d.put_chg_sum;
+        document.getElementById('put_total_sum').innerText = d.put_total_sum;
 
-        document.getElementById('final_diff').innerText = d.final_diff;
-        document.getElementById('time').innerText = d.time;
+        document.getElementById('diff_sum').innerText = d.diff_sum;
 
-        document.getElementById('strongest_bull_strike').innerText = d.strongest_bull_strike;
-        document.getElementById('strongest_bull_val').innerText = d.strongest_bull_val;
-        document.getElementById('strongest_bear_strike').innerText = d.strongest_bear_strike;
-        document.getElementById('strongest_bear_val').innerText = d.strongest_bear_val;
-
-        let reasonHtml = "";
-        d.reasons.forEach(x=>{
-            reasonHtml += `<div class="reason">• ${x}</div>`;
+        let reasons = "";
+        d.reasons.forEach(x => {
+            reasons += `<div class="reason">• ${x}</div>`;
         });
-        document.getElementById('reasons').innerHTML = reasonHtml;
+        document.getElementById('reasons').innerHTML = reasons;
 
         let html = "";
-        d.rows.forEach(x=>{
+        d.rows.forEach(x => {
             html += `
             <tr class="${x.atm ? 'atm' : ''}">
                 <td>${x.strike}</td>
@@ -414,4 +392,3 @@ setInterval(loadData, 2000);
 @app.route("/")
 def home():
     return render_template_string(HTML)
-    
