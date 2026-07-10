@@ -83,7 +83,6 @@ def api():
     support=top_put[0]["strike"]
     resistance=top_call[0]["strike"]
     gap=abs(resistance-support)
-
     side_pressure=abs(pchg-cchg)
     needed_contract=max(side_pressure*1.30, 100000)
 
@@ -105,9 +104,9 @@ def api():
         reason="Call અને Put બંને side pressure mixed છે"
 
     if pchg>cchg:
-        momentum="🟢 Upside momentum માટે Put Change Call Change કરતાં વધારે છે"
+        momentum="🟢 Upside momentum: Put Change Call Change કરતાં વધારે છે"
     elif cchg>pchg:
-        momentum="🔴 Downside momentum માટે Call Change Put Change કરતાં વધારે છે"
+        momentum="🔴 Downside momentum: Call Change Put Change કરતાં વધારે છે"
     else:
         momentum="🟡 Momentum equal છે"
 
@@ -132,18 +131,24 @@ body{font-family:Arial;background:#f4f6f8;margin:0;padding:6px}.card{background:
 td,th{padding:5px 3px;border-bottom:1px solid #ddd;text-align:right}td:first-child,th:first-child{text-align:center}.atm{background:#fff3cd;font-weight:bold}
 .callhi{background:#ffe1e1!important;font-weight:bold}.puthi{background:#d9fbe6!important;font-weight:bold}.small{text-align:center;color:#666;font-size:12px}
 </style></head><body>
-<div class="card">NIFTY LIVE: <span class="big" id="nifty">Loading...</span></div>
+
+<div class="card">
+NIFTY LIVE: <span class="big" id="nifty">Loading...</span>
+<div style="margin-top:6px">
+PCR: <span id="pcr" class="blue">-</span> |
+ATM: <span id="atm" class="blue">-</span> |
+Time: <span id="time">-</span>
+</div>
+</div>
+
 <div class="signal" id="decision">Loading...</div>
 
-<div class="card"><div class="grid">
-<div class="box"><div class="label">PCR</div><div class="val" id="pcr">-</div></div>
-<div class="box"><div class="label">ATM</div><div class="val" id="atm">-</div></div>
-<div class="box"><div class="label">Call Total</div><div class="val red" id="ctot">-</div></div>
-<div class="box"><div class="label">Put Total</div><div class="val green" id="ptot">-</div></div>
-<div class="box"><div class="label">Call Chg</div><div class="val red" id="cchg">-</div></div>
-<div class="box"><div class="label">Put Chg</div><div class="val green" id="pchg">-</div></div>
-<div class="box"><div class="label">Put-Call Diff</div><div class="val blue" id="diffsum">-</div></div>
-<div class="box"><div class="label">Time</div><div class="val" id="time">-</div></div>
+<div class="card"><h3>ATM ±5 Strike</h3>
+<table><thead><tr><th>Strike</th><th>Call OI</th><th>Call Chg</th><th>Call Total</th><th>Put Total</th><th>Put Chg</th><th>Put OI</th><th>Diff</th></tr></thead><tbody id="tb"></tbody></table></div>
+
+<div class="card"><h3>Strong Support / Resistance</h3><div class="grid">
+<div class="box"><div class="label">Resistance CE</div><div class="val red" id="res">-</div></div>
+<div class="box"><div class="label">Support PE</div><div class="val green" id="sup">-</div></div>
 </div></div>
 
 <div class="card"><h3>Sideways / Momentum</h3>
@@ -151,19 +156,21 @@ td,th{padding:5px 3px;border-bottom:1px solid #ddd;text-align:right}td:first-chi
 <div class="box"><div class="label">Support</div><div class="val green" id="support">-</div></div>
 <div class="box"><div class="label">Resistance</div><div class="val red" id="resistance">-</div></div>
 <div class="box"><div class="label">Range Gap</div><div class="val blue" id="gap">-</div></div>
-<div class="box"><div class="label">Move mate approx extra contracts</div><div class="val" id="needed">-</div></div>
+<div class="box"><div class="label">Move mate extra contracts</div><div class="val" id="needed">-</div></div>
 </div>
 <p id="reason"></p><p id="momentum"></p>
 </div>
 
-<div class="card"><h3>Strong Support / Resistance</h3><div class="grid">
-<div class="box"><div class="label">Resistance CE</div><div class="val red" id="res">-</div></div>
-<div class="box"><div class="label">Support PE</div><div class="val green" id="sup">-</div></div>
+<div class="card"><h3>Summary</h3><div class="grid">
+<div class="box"><div class="label">Call Total</div><div class="val red" id="ctot">-</div></div>
+<div class="box"><div class="label">Put Total</div><div class="val green" id="ptot">-</div></div>
+<div class="box"><div class="label">Call Chg</div><div class="val red" id="cchg">-</div></div>
+<div class="box"><div class="label">Put Chg</div><div class="val green" id="pchg">-</div></div>
+<div class="box"><div class="label">Put-Call Diff</div><div class="val blue" id="diffsum">-</div></div>
+<div class="box"><div class="label">Expiry</div><div class="val" id="exp">-</div></div>
 </div></div>
 
-<div class="card"><h3>ATM ±5 Strike</h3>
-<table><thead><tr><th>Strike</th><th>Call OI</th><th>Call Chg</th><th>Call Total</th><th>Put Total</th><th>Put Chg</th><th>Put OI</th><th>Diff</th></tr></thead><tbody id="tb"></tbody></table></div>
-<p class="small">Auto refresh 2 sec | Expiry: <span id="exp">-</span></p>
+<p class="small">Auto refresh 2 sec</p>
 
 <script>
 async function load(){
