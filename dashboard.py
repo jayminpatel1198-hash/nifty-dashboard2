@@ -49,8 +49,7 @@ def api():
 
     atm=round(nifty/STEP)*STEP
     low=atm-AROUND*STEP; high=atm+AROUND*STEP
-    rows=[]
-    coi=cchg=ctot=poi=pchg=ptot=0
+    rows=[]; coi=cchg=ctot=poi=pchg=ptot=0
 
     for x in data:
         st=int(float(x.get("strike_price",0)))
@@ -82,39 +81,42 @@ def api():
     diffsum=ptot-ctot
     support=top_put[0]["strike"]
     resistance=top_call[0]["strike"]
+    support_power=top_put[0]["pt"]
+    resistance_power=top_call[0]["ct"]
+
+    resistance_need=max(0,resistance_power-support_power)
+    resistance_added=max(0,pchg-cchg)
+    resistance_left=max(0,resistance_need-resistance_added)
+
+    support_need=max(0,support_power-resistance_power)
+    support_added=max(0,cchg-pchg)
+    support_left=max(0,support_need-support_added)
+
+    if resistance_left<=0 and pchg>cchg:
+        break_view="🟢 Resistance તૂટવાની શક્તિ આવી ગઈ"
+    elif support_left<=0 and cchg>pchg:
+        break_view="🔴 Support તૂટવાની શક્તિ આવી ગઈ"
+    else:
+        break_view="🟡 હજુ Breakout/Breakdown માટે contract બાકી છે"
+
     gap=abs(resistance-support)
-    side_pressure=abs(pchg-cchg)
-    needed_contract=max(side_pressure*1.30, 100000)
 
     if gap<=50 and abs(diffsum)<max(ctot,ptot)*0.18:
-        decision="🟡 SIDEWAYS / Range Market"
-        color="#fff3cd"
-        reason="Support અને Resistance નજીક છે, એટલે market range માં ફસાયેલું છે"
+        decision="🟡 SIDEWAYS / Range Market"; color="#fff3cd"
     elif diffsum>0 and pchg>cchg:
-        decision="🟢 CALL SIDE / Market ઉપર જઈ શકે"
-        color="#d9fbe6"
-        reason="Put contracts વધારે વધી રહ્યા છે એટલે support strong છે"
+        decision="🟢 CALL SIDE / Market ઉપર જઈ શકે"; color="#d9fbe6"
     elif diffsum<0 and cchg>pchg:
-        decision="🔴 PUT SIDE / Market નીચે જઈ શકે"
-        color="#ffe1e1"
-        reason="Call contracts વધારે વધી રહ્યા છે એટલે resistance strong છે"
+        decision="🔴 PUT SIDE / Market નીચે જઈ શકે"; color="#ffe1e1"
     else:
-        decision="🟡 WAIT / Clear Signal નથી"
-        color="#fff3cd"
-        reason="Call અને Put બંને side pressure mixed છે"
-
-    if pchg>cchg:
-        momentum="🟢 Upside momentum: Put Change Call Change કરતાં વધારે છે"
-    elif cchg>pchg:
-        momentum="🔴 Downside momentum: Call Change Put Change કરતાં વધારે છે"
-    else:
-        momentum="🟡 Momentum equal છે"
+        decision="🟡 WAIT / Clear Signal નથી"; color="#fff3cd"
 
     return jsonify({
         "nifty":nifty,"atm":atm,"expiry":exp,"pcr":pcr,"decision":decision,"color":color,
         "coi":fmt(coi),"cchg":fmt(cchg),"ctot":fmt(ctot),"poi":fmt(poi),"pchg":fmt(pchg),"ptot":fmt(ptot),
         "diffsum":fmt(diffsum),"support":support,"resistance":resistance,"gap":gap,
-        "needed":fmt(needed_contract),"reason":reason,"momentum":momentum,
+        "break_view":break_view,
+        "res_need":fmt(resistance_need),"res_add":fmt(resistance_added),"res_left":fmt(resistance_left),
+        "sup_need":fmt(support_need),"sup_add":fmt(support_added),"sup_left":fmt(support_left),
         "top_call":[{"strike":r["strike"],"v":fmt(r["ct"])} for r in top_call],
         "top_put":[{"strike":r["strike"],"v":fmt(r["pt"])} for r in top_put],
         "rows":rows,"time":datetime.now().strftime("%H:%M:%S")
@@ -132,14 +134,8 @@ td,th{padding:5px 3px;border-bottom:1px solid #ddd;text-align:right}td:first-chi
 .callhi{background:#ffe1e1!important;font-weight:bold}.puthi{background:#d9fbe6!important;font-weight:bold}.small{text-align:center;color:#666;font-size:12px}
 </style></head><body>
 
-<div class="card">
-NIFTY LIVE: <span class="big" id="nifty">Loading...</span>
-<div style="margin-top:6px">
-PCR: <span id="pcr" class="blue">-</span> |
-ATM: <span id="atm" class="blue">-</span> |
-Time: <span id="time">-</span>
-</div>
-</div>
+<div class="card">NIFTY LIVE: <span class="big" id="nifty">Loading...</span><br>
+PCR: <span id="pcr" class="blue">-</span> | ATM: <span id="atm" class="blue">-</span> | Time: <span id="time">-</span></div>
 
 <div class="signal" id="decision">Loading...</div>
 
@@ -151,15 +147,16 @@ Time: <span id="time">-</span>
 <div class="box"><div class="label">Support PE</div><div class="val green" id="sup">-</div></div>
 </div></div>
 
-<div class="card"><h3>Sideways / Momentum</h3>
+<div class="card"><h3>Breakout / Breakdown Requirement</h3>
+<div class="signal" id="break_view">-</div>
 <div class="grid">
-<div class="box"><div class="label">Support</div><div class="val green" id="support">-</div></div>
-<div class="box"><div class="label">Resistance</div><div class="val red" id="resistance">-</div></div>
-<div class="box"><div class="label">Range Gap</div><div class="val blue" id="gap">-</div></div>
-<div class="box"><div class="label">Move mate extra contracts</div><div class="val" id="needed">-</div></div>
-</div>
-<p id="reason"></p><p id="momentum"></p>
-</div>
+<div class="box"><div class="label">Resistance તોડવા Total Need</div><div class="val red" id="res_need">-</div></div>
+<div class="box"><div class="label">Resistance માટે Added</div><div class="val green" id="res_add">-</div></div>
+<div class="box"><div class="label">Resistance તોડવા Baki</div><div class="val blue" id="res_left">-</div></div>
+<div class="box"><div class="label">Support તોડવા Total Need</div><div class="val red" id="sup_need">-</div></div>
+<div class="box"><div class="label">Support માટે Added</div><div class="val red" id="sup_add">-</div></div>
+<div class="box"><div class="label">Support તોડવા Baki</div><div class="val blue" id="sup_left">-</div></div>
+</div></div>
 
 <div class="card"><h3>Summary</h3><div class="grid">
 <div class="box"><div class="label">Call Total</div><div class="val red" id="ctot">-</div></div>
@@ -179,8 +176,9 @@ async function load(){
  nifty.innerText=d.nifty; pcr.innerText=d.pcr; atm.innerText=d.atm; exp.innerText=d.expiry; time.innerText=d.time;
  decision.innerText=d.decision; decision.style.background=d.color;
  ctot.innerText=d.ctot; ptot.innerText=d.ptot; cchg.innerText=d.cchg; pchg.innerText=d.pchg; diffsum.innerText=d.diffsum;
- support.innerText=d.support; resistance.innerText=d.resistance; gap.innerText=d.gap+" pts"; needed.innerText=d.needed;
- reason.innerText=d.reason; momentum.innerText=d.momentum;
+ break_view.innerText=d.break_view;
+ res_need.innerText=d.res_need; res_add.innerText=d.res_add; res_left.innerText=d.res_left;
+ sup_need.innerText=d.sup_need; sup_add.innerText=d.sup_add; sup_left.innerText=d.sup_left;
  res.innerHTML=d.top_call.map((x,i)=>`${i+1}) ${x.strike} ${x.v}`).join('<br>');
  sup.innerHTML=d.top_put.map((x,i)=>`${i+1}) ${x.strike} ${x.v}`).join('<br>');
  let html='';
