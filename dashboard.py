@@ -79,29 +79,42 @@ def api():
 
     pcr=round(poi/coi,2) if coi else 0
     diffsum=ptot-ctot
-    support=top_put[0]["strike"]
-    resistance=top_call[0]["strike"]
-    support_power=top_put[0]["pt"]
-    resistance_power=top_call[0]["ct"]
 
-    resistance_need=max(0,resistance_power-support_power)
-    resistance_added=max(0,pchg-cchg)
-    resistance_left=max(0,resistance_need-resistance_added)
+    res_strike=top_call[0]["strike"]
+    sup_strike=top_put[0]["strike"]
+    res_power=top_call[0]["ct"]
+    sup_power=top_put[0]["pt"]
 
-    support_need=max(0,support_power-resistance_power)
-    support_added=max(0,cchg-pchg)
-    support_left=max(0,support_need-support_added)
+    # Easy logic
+    up_need=max(0,res_power-sup_power)
+    up_added=max(0,pchg-cchg)
+    up_left=max(0,up_need-up_added)
 
-    if resistance_left<=0 and pchg>cchg:
-        break_view="🟢 Resistance તૂટવાની શક્તિ આવી ગઈ"
-    elif support_left<=0 and cchg>pchg:
-        break_view="🔴 Support તૂટવાની શક્તિ આવી ગઈ"
+    down_need=max(0,sup_power-res_power)
+    down_added=max(0,cchg-pchg)
+    down_left=max(0,down_need-down_added)
+
+    gap=abs(res_strike-sup_strike)
+
+    if gap<=50:
+        sideways_reason=f"Sideways: Support {sup_strike} અને Resistance {res_strike} બહુ નજીક છે."
+    elif abs(diffsum)<max(ctot,ptot)*0.18:
+        sideways_reason="Sideways: Put અને Call વચ્ચે મોટો difference નથી."
     else:
-        break_view="🟡 હજુ Breakout/Breakdown માટે contract બાકી છે"
+        sideways_reason="Clear range નથી, momentum side જોઈ શકાય."
 
-    gap=abs(resistance-support)
+    if up_left<=0 and pchg>cchg:
+        easy_signal=f"🟢 {res_strike} Resistance તૂટવા માટે strength આવી ગઈ"
+    elif down_left<=0 and cchg>pchg:
+        easy_signal=f"🔴 {sup_strike} Support તૂટવા માટે strength આવી ગઈ"
+    elif pchg>cchg:
+        easy_signal=f"🟢 ઉપર જવા માટે Put side વધી રહી છે, પણ હજુ {fmt(up_left)} contract બાકી"
+    elif cchg>pchg:
+        easy_signal=f"🔴 નીચે જવા માટે Call side વધી રહી છે, પણ હજુ {fmt(down_left)} contract બાકી"
+    else:
+        easy_signal="🟡 બંને side equal છે, wait"
 
-    if gap<=50 and abs(diffsum)<max(ctot,ptot)*0.18:
+    if gap<=50 or abs(diffsum)<max(ctot,ptot)*0.18:
         decision="🟡 SIDEWAYS / Range Market"; color="#fff3cd"
     elif diffsum>0 and pchg>cchg:
         decision="🟢 CALL SIDE / Market ઉપર જઈ શકે"; color="#d9fbe6"
@@ -113,10 +126,12 @@ def api():
     return jsonify({
         "nifty":nifty,"atm":atm,"expiry":exp,"pcr":pcr,"decision":decision,"color":color,
         "coi":fmt(coi),"cchg":fmt(cchg),"ctot":fmt(ctot),"poi":fmt(poi),"pchg":fmt(pchg),"ptot":fmt(ptot),
-        "diffsum":fmt(diffsum),"support":support,"resistance":resistance,"gap":gap,
-        "break_view":break_view,
-        "res_need":fmt(resistance_need),"res_add":fmt(resistance_added),"res_left":fmt(resistance_left),
-        "sup_need":fmt(support_need),"sup_add":fmt(support_added),"sup_left":fmt(support_left),
+        "diffsum":fmt(diffsum),
+        "res_strike":res_strike,"sup_strike":sup_strike,
+        "res_power":fmt(res_power),"sup_power":fmt(sup_power),
+        "up_need":fmt(up_need),"up_added":fmt(up_added),"up_left":fmt(up_left),
+        "down_need":fmt(down_need),"down_added":fmt(down_added),"down_left":fmt(down_left),
+        "easy_signal":easy_signal,"sideways_reason":sideways_reason,
         "top_call":[{"strike":r["strike"],"v":fmt(r["ct"])} for r in top_call],
         "top_put":[{"strike":r["strike"],"v":fmt(r["pt"])} for r in top_put],
         "rows":rows,"time":datetime.now().strftime("%H:%M:%S")
@@ -124,14 +139,23 @@ def api():
 
 HTML="""
 <html><head><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Nifty OI Pro</title>
+<title>Nifty OI Easy</title>
 <style>
-body{font-family:Arial;background:#f4f6f8;margin:0;padding:6px}.card{background:white;padding:10px;margin:6px;border-radius:14px;box-shadow:0 2px 5px #ddd}
-.signal{padding:14px;border-radius:14px;text-align:center;font-size:20px;font-weight:bold;margin:6px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
-.box{background:#f8f9fa;border-radius:12px;padding:8px;text-align:center}.label{font-size:11px;color:#555}.val{font-size:17px;font-weight:bold}.big{font-size:23px;font-weight:bold}
-.green{color:green;font-weight:bold}.red{color:red;font-weight:bold}.blue{color:#0754c7;font-weight:bold}table{width:100%;border-collapse:collapse;font-size:10.5px}
-td,th{padding:5px 3px;border-bottom:1px solid #ddd;text-align:right}td:first-child,th:first-child{text-align:center}.atm{background:#fff3cd;font-weight:bold}
-.callhi{background:#ffe1e1!important;font-weight:bold}.puthi{background:#d9fbe6!important;font-weight:bold}.small{text-align:center;color:#666;font-size:12px}
+body{font-family:Arial;background:#f4f6f8;margin:0;padding:6px}
+.card{background:white;padding:10px;margin:6px;border-radius:14px;box-shadow:0 2px 5px #ddd}
+.signal{padding:13px;border-radius:14px;text-align:center;font-size:19px;font-weight:bold;margin:6px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.box{background:#f8f9fa;border-radius:12px;padding:8px;text-align:center}
+.label{font-size:11px;color:#555}.val{font-size:17px;font-weight:bold}.big{font-size:23px;font-weight:bold}
+.green{color:green;font-weight:bold}.red{color:red;font-weight:bold}.blue{color:#0754c7;font-weight:bold}
+table{width:100%;border-collapse:collapse;font-size:10.5px}
+td,th{padding:5px 3px;border-bottom:1px solid #ddd;text-align:right}
+td:first-child,th:first-child{text-align:center}
+.atm{background:#fff3cd;font-weight:bold}
+.callhi{background:#ffe1e1!important;font-weight:bold}
+.puthi{background:#d9fbe6!important;font-weight:bold}
+.info{font-size:14px;line-height:1.45}
+.small{text-align:center;color:#666;font-size:12px}
 </style></head><body>
 
 <div class="card">NIFTY LIVE: <span class="big" id="nifty">Loading...</span><br>
@@ -140,23 +164,35 @@ PCR: <span id="pcr" class="blue">-</span> | ATM: <span id="atm" class="blue">-</
 <div class="signal" id="decision">Loading...</div>
 
 <div class="card"><h3>ATM ±5 Strike</h3>
-<table><thead><tr><th>Strike</th><th>Call OI</th><th>Call Chg</th><th>Call Total</th><th>Put Total</th><th>Put Chg</th><th>Put OI</th><th>Diff</th></tr></thead><tbody id="tb"></tbody></table></div>
+<table><thead><tr>
+<th>Strike</th><th>Call OI</th><th>Call Chg</th><th>Call Total</th>
+<th>Put Total</th><th>Put Chg</th><th>Put OI</th><th>Diff</th>
+</tr></thead><tbody id="tb"></tbody></table></div>
 
 <div class="card"><h3>Strong Support / Resistance</h3><div class="grid">
 <div class="box"><div class="label">Resistance CE</div><div class="val red" id="res">-</div></div>
 <div class="box"><div class="label">Support PE</div><div class="val green" id="sup">-</div></div>
 </div></div>
 
-<div class="card"><h3>Breakout / Breakdown Requirement</h3>
-<div class="signal" id="break_view">-</div>
+<div class="card"><h3>Easy Breakout / Breakdown</h3>
+<div class="signal" id="easy_signal">-</div>
 <div class="grid">
-<div class="box"><div class="label">Resistance તોડવા Total Need</div><div class="val red" id="res_need">-</div></div>
-<div class="box"><div class="label">Resistance માટે Added</div><div class="val green" id="res_add">-</div></div>
-<div class="box"><div class="label">Resistance તોડવા Baki</div><div class="val blue" id="res_left">-</div></div>
-<div class="box"><div class="label">Support તોડવા Total Need</div><div class="val red" id="sup_need">-</div></div>
-<div class="box"><div class="label">Support માટે Added</div><div class="val red" id="sup_add">-</div></div>
-<div class="box"><div class="label">Support તોડવા Baki</div><div class="val blue" id="sup_left">-</div></div>
-</div></div>
+<div class="box"><div class="label">Resistance Strike</div><div class="val red" id="res_strike">-</div></div>
+<div class="box"><div class="label">Support Strike</div><div class="val green" id="sup_strike">-</div></div>
+
+<div class="box"><div class="label">Resistance Power</div><div class="val red" id="res_power">-</div></div>
+<div class="box"><div class="label">Support Power</div><div class="val green" id="sup_power">-</div></div>
+
+<div class="box"><div class="label">ઉપર તોડવા Need</div><div class="val blue" id="up_need">-</div></div>
+<div class="box"><div class="label">ઉપર Added</div><div class="val green" id="up_added">-</div></div>
+<div class="box"><div class="label">ઉપર Baki</div><div class="val blue" id="up_left">-</div></div>
+
+<div class="box"><div class="label">નીચે તોડવા Need</div><div class="val blue" id="down_need">-</div></div>
+<div class="box"><div class="label">નીચે Added</div><div class="val red" id="down_added">-</div></div>
+<div class="box"><div class="label">નીચે Baki</div><div class="val blue" id="down_left">-</div></div>
+</div>
+<p class="info" id="sideways_reason"></p>
+</div>
 
 <div class="card"><h3>Summary</h3><div class="grid">
 <div class="box"><div class="label">Call Total</div><div class="val red" id="ctot">-</div></div>
@@ -176,9 +212,12 @@ async function load(){
  nifty.innerText=d.nifty; pcr.innerText=d.pcr; atm.innerText=d.atm; exp.innerText=d.expiry; time.innerText=d.time;
  decision.innerText=d.decision; decision.style.background=d.color;
  ctot.innerText=d.ctot; ptot.innerText=d.ptot; cchg.innerText=d.cchg; pchg.innerText=d.pchg; diffsum.innerText=d.diffsum;
- break_view.innerText=d.break_view;
- res_need.innerText=d.res_need; res_add.innerText=d.res_add; res_left.innerText=d.res_left;
- sup_need.innerText=d.sup_need; sup_add.innerText=d.sup_add; sup_left.innerText=d.sup_left;
+ easy_signal.innerText=d.easy_signal; easy_signal.style.background=d.color;
+ res_strike.innerText=d.res_strike; sup_strike.innerText=d.sup_strike;
+ res_power.innerText=d.res_power; sup_power.innerText=d.sup_power;
+ up_need.innerText=d.up_need; up_added.innerText=d.up_added; up_left.innerText=d.up_left;
+ down_need.innerText=d.down_need; down_added.innerText=d.down_added; down_left.innerText=d.down_left;
+ sideways_reason.innerText=d.sideways_reason;
  res.innerHTML=d.top_call.map((x,i)=>`${i+1}) ${x.strike} ${x.v}`).join('<br>');
  sup.innerHTML=d.top_put.map((x,i)=>`${i+1}) ${x.strike} ${x.v}`).join('<br>');
  let html='';
