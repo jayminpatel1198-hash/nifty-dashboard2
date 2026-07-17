@@ -1,36 +1,40 @@
 from flask import Flask, jsonify, render_template_string
+from datetime import datetime, date
 import os
-from datetime import datetime
-
 import requests
+
 
 app = Flask(__name__)
 
+
 # =========================================================
-# CONFIGURATION
+# CONFIG
 # =========================================================
 
-UPSTOX_TOKEN = os.environ.get("UPSTOX_TOKEN", "").strip()
+TOKEN = os.environ.get("UPSTOX_TOKEN", "").strip()
 
 UNDERLYING = "NSE_INDEX|Nifty 50"
 STRIKE_STEP = 50
 STRIKES_EACH_SIDE = 5
-REQUEST_TIMEOUT = 15
+TIMEOUT = 18
+
+OPTION_CHAIN_URL = "https://api.upstox.com/v2/option/chain"
+OPTION_CONTRACT_URL = "https://api.upstox.com/v2/option/contract"
 
 
 # =========================================================
-# HELPER FUNCTIONS
+# HELPERS
 # =========================================================
 
-def api_headers():
-    if not UPSTOX_TOKEN:
+def headers():
+    if not TOKEN:
         raise RuntimeError(
-            "Render Environment માં UPSTOX_TOKEN add કરો"
+            "UPSTOX_TOKEN missing છે. Render Environmentમાં token add કરો."
         )
 
     return {
         "Accept": "application/json",
-        "Authorization": f"Bearer {UPSTOX_TOKEN}",
+        "Authorization": f"Bearer {TOKEN}",
     }
 
 
@@ -41,13 +45,13 @@ def safe_float(value):
         return 0.0
 
 
-def format_number(value):
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return "-"
+def fmt(value):
+    number = safe_float(value)
 
-    sign = "+" if number > 0 else "-" if number < 0 else ""
+    if abs(number) < 0.5:
+        return "0"
+
+    sign = "+" if number > 0 else "-"
     number = abs(number)
 
     if number >= 10_000_000:
@@ -62,24 +66,88 @@ def format_number(value):
     return f"{sign}{number:.0f}"
 
 
+def extract_error(payload, default_message):
+    if not isinstance(payload, dict):
+        return default_message
+
+    if payload.get("message"):
+        return str(payload["message"])
+
+    errors = payload.get("errors")
+
+    if isinstance(errors, list) and errors:
+        first = errors[0]
+
+        if isinstance(first, dict):
+            return str(
+                first.get("message")
+                or first.get("errorCode")
+                or first
+            )
+
+        return str(first)
+
+    return default_message
+
+
+def request_json(url, params):
+    try:
+        response = requests.get(
+            url,
+            headers=headers(),
+            params=params,
+            timeout=TIMEOUT,
+        )
+    except requests.Timeout:
+        raise RuntimeError("Upstox API timeout. ફરી refresh કરો.")
+    except requests.RequestException as error:
+        raise RuntimeError(f"Upstox connection error: {error}")
+
+    try:
+        payload = response.json()
+    except ValueError:
+        raise RuntimeError(
+            f"Upstox invalid response મળ્યો. HTTP {response.status_code}"
+        )
+
+    if response.status_code == 401:
+        raise RuntimeError(
+            "UPSTOX_TOKEN માન્ય નથી અથવા expire થયો છે. "
+            "Analytics Token ફરી copy કરીને Renderમાં update કરો."
+        )
+
+    if not response.ok:
+        raise RuntimeError(
+            extract_error(
+                payload,
+                f"Upstox API HTTP {response.status_code}",
+            )
+        )
+
+    if payload.get("status") != "success":
+        raise RuntimeError(
+            extract_error(payload, "Upstox API request failed")
+        )
+
+    return payload
+
+
 def calculate_oi_change(market_data):
     """
-    Current OI - Previous OI.
-
-    Different API payload versions may use prev_oi,
-    previous_oi or another change field, so fallbacks
-    are included.
+    Upstox option-chain market_dataમાંથી OI change કાઢે છે.
+    પહેલાં direct change field તપાસે છે.
+    પછી current OI - previous OI કરે છે.
     """
 
-    direct_change_keys = [
+    direct_keys = [
         "oi_day_change",
         "oi_change",
         "change_oi",
-        "oi_change_value",
         "change_in_oi",
+        "oi_change_value",
     ]
 
-    for key in direct_change_keys:
+    for key in direct_keys:
         value = market_data.get(key)
 
         if value not in (None, ""):
@@ -100,118 +168,176 @@ def calculate_oi_change(market_data):
     return 0.0
 
 
-def get_expiry_value():
+# =========================================================
+# EXPIRY SELECTION
+# =========================================================
+
+def get_active_expiries():
     """
-    Render Environment માં EXPIRY_DATE હોય તો તે વાપરે.
-    ન હોય તો current_week expiry વાપરે.
+    Option Contracts APIમાંથી active NIFTY expiries શોધે છે.
     """
 
-    expiry = os.environ.get("EXPIRY_DATE", "").strip()
-
-    if expiry:
-        return expiry
-
-    return "current_week"
-
-
-def fetch_option_chain():
-    response = requests.get(
-        "https://api.upstox.com/v2/option/chain",
-        headers=api_headers(),
-        params={
+    payload = request_json(
+        OPTION_CONTRACT_URL,
+        {
             "instrument_key": UNDERLYING,
-            "expiry_date": get_expiry_value(),
         },
-        timeout=REQUEST_TIMEOUT,
     )
 
-    response.raise_for_status()
+    expiries = set()
 
-    payload = response.json()
+    for contract in payload.get("data", []):
+        expiry = contract.get("expiry")
 
-    if payload.get("status") != "success":
-        raise RuntimeError(str(payload))
+        if expiry:
+            expiries.add(str(expiry))
+
+    if not expiries:
+        return []
+
+    today_text = date.today().isoformat()
+
+    return sorted(
+        expiry
+        for expiry in expiries
+        if expiry >= today_text
+    )
+
+
+def try_option_chain(expiry_value):
+    """
+    આપેલી expiry માટે option chain માંગે છે.
+    Data ન હોય તો None return કરે છે.
+    """
+
+    try:
+        payload = request_json(
+            OPTION_CHAIN_URL,
+            {
+                "instrument_key": UNDERLYING,
+                "expiry_date": expiry_value,
+            },
+        )
+    except RuntimeError:
+        return None
 
     data = payload.get("data", [])
 
     if not data:
-        raise RuntimeError(
-            "Option chain data મળ્યો નથી. "
-            "EXPIRY_DATE સાચી છે કે નહીં તે check કરો."
-        )
+        return None
 
     return data
 
 
-def ranking_text(rank):
-    if rank == 1:
-        return "સૌથી મજબૂત"
-    if rank == 2:
-        return "બીજા નંબરનું"
-    if rank == 3:
-        return "ત્રીજા નંબરનું"
+def fetch_option_chain():
+    """
+    Expiry selection sequence:
 
-    return ""
+    1. current_week
+    2. active actual dates from option contracts
+    3. next_week
+    4. current_month
+    """
+
+    attempts = []
+
+    for keyword in [
+        "current_week",
+        "next_week",
+        "current_month",
+    ]:
+        attempts.append(keyword)
+
+    try:
+        active_expiries = get_active_expiries()
+    except RuntimeError:
+        active_expiries = []
+
+    # Actual datesને keyword પછી નહીં પરંતુ current_week પછી priority આપવી.
+    ordered_attempts = ["current_week"]
+
+    ordered_attempts.extend(
+        expiry
+        for expiry in active_expiries[:8]
+        if expiry not in ordered_attempts
+    )
+
+    for keyword in ["next_week", "current_month"]:
+        if keyword not in ordered_attempts:
+            ordered_attempts.append(keyword)
+
+    for expiry_value in ordered_attempts:
+        chain = try_option_chain(expiry_value)
+
+        if chain:
+            actual_expiry = (
+                chain[0].get("expiry")
+                or expiry_value
+            )
+
+            return chain, actual_expiry
+
+    raise RuntimeError(
+        "કોઈ active NIFTY Option Chain data મળ્યો નથી. "
+        "Token અથવા Upstox API response check કરો."
+    )
 
 
 # =========================================================
-# OPTION CHAIN API
+# API ROUTE
 # =========================================================
 
 @app.route("/api")
-def option_chain_api():
+def api():
     try:
-        chain = fetch_option_chain()
+        chain, selected_expiry = fetch_option_chain()
 
         nifty_price = 0.0
-        expiry = get_expiry_value()
 
         for item in chain:
-            spot = safe_float(item.get("underlying_spot_price"))
+            spot = safe_float(
+                item.get("underlying_spot_price")
+            )
 
             if spot > 0:
                 nifty_price = spot
                 break
 
         if nifty_price <= 0:
-            raise RuntimeError(
-                "NIFTY live spot price મળ્યો નથી"
-            )
-
-        first_expiry = chain[0].get("expiry")
-
-        if first_expiry:
-            expiry = first_expiry
+            raise RuntimeError("NIFTY live price મળ્યો નથી.")
 
         atm = int(
-            round(nifty_price / STRIKE_STEP) * STRIKE_STEP
+            round(nifty_price / STRIKE_STEP)
+            * STRIKE_STEP
         )
 
         lowest_strike = (
-            atm - STRIKES_EACH_SIDE * STRIKE_STEP
+            atm
+            - STRIKES_EACH_SIDE
+            * STRIKE_STEP
         )
 
         highest_strike = (
-            atm + STRIKES_EACH_SIDE * STRIKE_STEP
+            atm
+            + STRIKES_EACH_SIDE
+            * STRIKE_STEP
         )
 
         rows = []
 
         total_call_oi = 0.0
         total_put_oi = 0.0
-
         total_call_change = 0.0
         total_put_change = 0.0
 
         for item in chain:
             strike = int(
-                safe_float(item.get("strike_price"))
+                safe_float(
+                    item.get("strike_price")
+                )
             )
 
-            if strike < lowest_strike:
-                continue
-
-            if strike > highest_strike:
+            if strike < lowest_strike or strike > highest_strike:
                 continue
 
             call_market = (
@@ -240,32 +366,17 @@ def option_chain_api():
                 put_market
             )
 
-            total_call_oi += call_oi
-            total_put_oi += put_oi
-
-            total_call_change += call_change
-            total_put_change += put_change
-
             call_total = call_oi + call_change
             put_total = put_oi + put_change
 
-            pressure_difference = put_total - call_total
-
-            if pressure_difference > 0:
-                row_class = "support-row"
-                row_status = "SUPPORT"
-
-            elif pressure_difference < 0:
-                row_class = "resistance-row"
-                row_status = "RESISTANCE"
-
-            else:
-                row_class = "balanced-row"
-                row_status = "BALANCED"
+            total_call_oi += call_oi
+            total_put_oi += put_oi
+            total_call_change += call_change
+            total_put_change += put_change
 
             rows.append({
                 "strike": strike,
-                "is_atm": strike == atm,
+                "atm": strike == atm,
 
                 "call_oi_raw": call_oi,
                 "call_change_raw": call_change,
@@ -275,35 +386,32 @@ def option_chain_api():
                 "put_change_raw": put_change,
                 "put_total_raw": put_total,
 
-                "call_oi": format_number(call_oi),
-                "call_change": format_number(call_change),
-                "call_total": format_number(call_total),
+                "call_oi": fmt(call_oi),
+                "call_change": fmt(call_change),
+                "call_total": fmt(call_total),
 
-                "put_oi": format_number(put_oi),
-                "put_change": format_number(put_change),
-                "put_total": format_number(put_total),
-
-                "row_class": row_class,
-                "row_status": row_status,
+                "put_oi": fmt(put_oi),
+                "put_change": fmt(put_change),
+                "put_total": fmt(put_total),
             })
 
         rows.sort(
             key=lambda row: row["strike"]
         )
 
-        if not rows:
+        if len(rows) < 3:
             raise RuntimeError(
-                "ATM ±5 strikes data મળ્યો નથી"
+                "ATM નજીક પૂરતો strike data મળ્યો નથી."
             )
 
-        # Resistance ATM અથવા ATM ઉપર ગણીએ.
+        # Resistance માત્ર ATM અને ઉપરના strikesમાંથી.
         resistance_candidates = [
             row
             for row in rows
             if row["strike"] >= atm
         ]
 
-        # Support ATM અથવા ATM નીચે ગણીએ.
+        # Support માત્ર ATM અને નીચેના strikesમાંથી.
         support_candidates = [
             row
             for row in rows
@@ -316,8 +424,6 @@ def option_chain_api():
         if not support_candidates:
             support_candidates = rows
 
-        # Call OI + positive Call change
-        # દ્વારા resistance strength.
         resistance_ranked = sorted(
             resistance_candidates,
             key=lambda row: (
@@ -327,8 +433,6 @@ def option_chain_api():
             reverse=True,
         )[:3]
 
-        # Put OI + positive Put change
-        # દ્વારા support strength.
         support_ranked = sorted(
             support_candidates,
             key=lambda row: (
@@ -341,42 +445,29 @@ def option_chain_api():
         strongest_resistance = resistance_ranked[0]
         strongest_support = support_ranked[0]
 
-        resistance_rank_map = {
+        resistance_map = {
             row["strike"]: index + 1
-            for index, row
-            in enumerate(resistance_ranked)
+            for index, row in enumerate(
+                resistance_ranked
+            )
         }
 
-        support_rank_map = {
+        support_map = {
             row["strike"]: index + 1
-            for index, row
-            in enumerate(support_ranked)
+            for index, row in enumerate(
+                support_ranked
+            )
         }
 
         for row in rows:
-            resistance_rank = resistance_rank_map.get(
+            row["res_rank"] = resistance_map.get(
                 row["strike"],
                 0,
             )
 
-            support_rank = support_rank_map.get(
+            row["sup_rank"] = support_map.get(
                 row["strike"],
                 0,
-            )
-
-            row["resistance_rank"] = resistance_rank
-            row["support_rank"] = support_rank
-
-            row["resistance_badge"] = (
-                f"R{resistance_rank}"
-                if resistance_rank
-                else ""
-            )
-
-            row["support_badge"] = (
-                f"S{support_rank}"
-                if support_rank
-                else ""
             )
 
         pcr = (
@@ -388,289 +479,167 @@ def option_chain_api():
             else 0
         )
 
-        change_difference = (
-            total_put_change - total_call_change
-        )
-
-        oi_difference = (
-            total_put_oi - total_call_oi
-        )
-
-        resistance_distance = (
+        support_resistance_gap = abs(
             strongest_resistance["strike"]
-            - nifty_price
-        )
-
-        support_distance = (
-            nifty_price
             - strongest_support["strike"]
         )
 
-        # =================================================
-        # SIMPLE MARKET VIEW
-        # =================================================
+        put_call_oi_difference = (
+            total_put_oi - total_call_oi
+        )
 
-        bullish_points = 0
-        bearish_points = 0
+        put_call_change_difference = (
+            total_put_change
+            - total_call_change
+        )
 
-        market_reasons = []
-
-        if total_put_change > total_call_change:
-            bullish_points += 1
-
-            market_reasons.append(
-                "Put OI Change વધારે છે"
-            )
-        else:
-            bearish_points += 1
-
-            market_reasons.append(
-                "Call OI Change વધારે છે"
-            )
-
-        if total_put_oi > total_call_oi:
-            bullish_points += 1
-
-            market_reasons.append(
-                "Total Put OI વધારે છે"
-            )
-        else:
-            bearish_points += 1
-
-            market_reasons.append(
-                "Total Call OI વધારે છે"
-            )
-
-        if pcr >= 1:
-            bullish_points += 1
-
-            market_reasons.append(
-                "PCR 1 અથવા વધુ છે"
-            )
-        else:
-            bearish_points += 1
-
-            market_reasons.append(
-                "PCR 1થી નીચે છે"
-            )
-
-        if (
-            abs(
-                strongest_resistance["strike"]
-                - strongest_support["strike"]
-            )
+        # Sideways logic
+        close_levels = (
+            support_resistance_gap
             <= STRIKE_STEP
+        )
+
+        total_oi_base = max(
+            total_call_oi,
+            total_put_oi,
+            1,
+        )
+
+        balanced_oi = (
+            abs(put_call_oi_difference)
+            / total_oi_base
+            < 0.18
+        )
+
+        balanced_change = (
+            abs(put_call_change_difference)
+            / max(
+                abs(total_call_change),
+                abs(total_put_change),
+                1,
+            )
+            < 0.22
+        )
+
+        if close_levels and (
+            balanced_oi or balanced_change
         ):
-            market_view = "🟡 SIDEWAYS / RANGE"
+            signal = "🟡 SIDEWAYS / RANGE"
 
-            market_message = (
-                f"Support {strongest_support['strike']} "
-                f"અને Resistance "
-                f"{strongest_resistance['strike']} "
-                "નજીક છે. Breakout કે breakdown "
-                "થાય ત્યાં સુધી WAIT કરવું સારું."
+            message = (
+                f"Support {strongest_support['strike']} અને "
+                f"Resistance {strongest_resistance['strike']} નજીક છે. "
+                "Call અને Put pressure બંને હોવાથી breakout પહેલાં WAIT."
             )
 
-            market_color = "#fff3cd"
+            signal_color = "#fff3cd"
 
-        elif bullish_points > bearish_points:
-            market_view = "🟢 SUPPORT SIDE મજબૂત"
+        elif (
+            total_put_change > total_call_change
+            and total_put_oi > total_call_oi
+        ):
+            signal = "🟢 SUPPORT SIDE STRONG"
 
-            market_message = (
-                f"Support "
-                f"{strongest_support['strike']} "
-                "મજબૂત છે. ઉપર move માટે "
-                f"{strongest_resistance['strike']} "
-                "Resistance ઉપર price sustain થવું જોઈએ."
+            message = (
+                f"{strongest_support['strike']} support મજબૂત છે. "
+                f"{strongest_resistance['strike']} ઉપર price sustain થાય "
+                "પછી CALL side જુઓ."
             )
 
-            market_color = "#d9fbe6"
+            signal_color = "#d9fbe6"
 
-        elif bearish_points > bullish_points:
-            market_view = "🔴 RESISTANCE SIDE મજબૂત"
+        elif (
+            total_call_change > total_put_change
+            and total_call_oi > total_put_oi
+        ):
+            signal = "🔴 RESISTANCE SIDE STRONG"
 
-            market_message = (
-                f"Resistance "
-                f"{strongest_resistance['strike']} "
-                "મજબૂત છે. નીચે move માટે "
-                f"{strongest_support['strike']} "
-                "Support નીચે price sustain થવું જોઈએ."
+            message = (
+                f"{strongest_resistance['strike']} resistance મજબૂત છે. "
+                f"{strongest_support['strike']} નીચે price sustain થાય "
+                "પછી PUT side જુઓ."
             )
 
-            market_color = "#ffe1e1"
+            signal_color = "#ffe1e1"
 
         else:
-            market_view = "🟡 બંને SIDE MIXED"
+            signal = "🟡 MIXED / WAIT"
 
-            market_message = (
-                "Call અને Put pressure mixed છે. "
-                "Option buying માટે WAIT કરવું સારું."
+            message = (
+                "OI અને OI Change એક જ direction બતાવતા નથી. "
+                "Option buying પહેલાં price breakout/breakdownની રાહ જુઓ."
             )
 
-            market_color = "#fff3cd"
-
-        resistance_list = []
-
-        for index, row in enumerate(
-            resistance_ranked,
-            start=1,
-        ):
-            resistance_list.append({
-                "rank": index,
-                "strength": ranking_text(index),
-                "strike": row["strike"],
-
-                "oi": row["call_oi"],
-                "change": row["call_change"],
-                "total": row["call_total"],
-
-                "change_raw": row[
-                    "call_change_raw"
-                ],
-            })
-
-        support_list = []
-
-        for index, row in enumerate(
-            support_ranked,
-            start=1,
-        ):
-            support_list.append({
-                "rank": index,
-                "strength": ranking_text(index),
-                "strike": row["strike"],
-
-                "oi": row["put_oi"],
-                "change": row["put_change"],
-                "total": row["put_total"],
-
-                "change_raw": row[
-                    "put_change_raw"
-                ],
-            })
+            signal_color = "#fff3cd"
 
         return jsonify({
             "nifty": round(nifty_price, 2),
             "atm": atm,
-            "expiry": expiry,
             "pcr": pcr,
+            "expiry": selected_expiry,
+            "time": datetime.now().strftime("%H:%M:%S"),
 
-            "time": datetime.now().strftime(
-                "%H:%M:%S"
-            ),
+            "signal": signal,
+            "message": message,
+            "signal_color": signal_color,
 
             "rows": rows,
 
-            "market_view": market_view,
-            "market_message": market_message,
-            "market_color": market_color,
-
-            "market_reasons": market_reasons,
-
-            "strongest_resistance": {
-                "strike": strongest_resistance[
-                    "strike"
-                ],
-
-                "oi": strongest_resistance[
-                    "call_oi"
-                ],
-
-                "change": strongest_resistance[
-                    "call_change"
-                ],
-
-                "total": strongest_resistance[
-                    "call_total"
-                ],
-
-                "distance": round(
-                    resistance_distance,
-                    2,
-                ),
+            "resistance": {
+                "strike": strongest_resistance["strike"],
+                "oi": strongest_resistance["call_oi"],
+                "change": strongest_resistance["call_change"],
+                "total": strongest_resistance["call_total"],
             },
 
-            "strongest_support": {
-                "strike": strongest_support[
-                    "strike"
-                ],
-
-                "oi": strongest_support[
-                    "put_oi"
-                ],
-
-                "change": strongest_support[
-                    "put_change"
-                ],
-
-                "total": strongest_support[
-                    "put_total"
-                ],
-
-                "distance": round(
-                    support_distance,
-                    2,
-                ),
+            "support": {
+                "strike": strongest_support["strike"],
+                "oi": strongest_support["put_oi"],
+                "change": strongest_support["put_change"],
+                "total": strongest_support["put_total"],
             },
 
-            "resistance_list": resistance_list,
-            "support_list": support_list,
+            "resistance_list": [
+                {
+                    "rank": index + 1,
+                    "strike": row["strike"],
+                    "oi": row["call_oi"],
+                    "change": row["call_change"],
+                    "total": row["call_total"],
+                }
+                for index, row in enumerate(
+                    resistance_ranked
+                )
+            ],
 
-            "total_call_oi": format_number(
-                total_call_oi
-            ),
+            "support_list": [
+                {
+                    "rank": index + 1,
+                    "strike": row["strike"],
+                    "oi": row["put_oi"],
+                    "change": row["put_change"],
+                    "total": row["put_total"],
+                }
+                for index, row in enumerate(
+                    support_ranked
+                )
+            ],
 
-            "total_call_oi_raw": total_call_oi,
+            "total_call_oi": fmt(total_call_oi),
+            "total_put_oi": fmt(total_put_oi),
 
-            "total_put_oi": format_number(
-                total_put_oi
-            ),
-
-            "total_put_oi_raw": total_put_oi,
-
-            "total_call_change": format_number(
+            "total_call_change": fmt(
                 total_call_change
             ),
 
-            "total_call_change_raw": (
-                total_call_change
-            ),
-
-            "total_put_change": format_number(
+            "total_put_change": fmt(
                 total_put_change
             ),
 
-            "total_put_change_raw": (
-                total_put_change
+            "change_difference": fmt(
+                put_call_change_difference
             ),
-
-            "change_difference": format_number(
-                change_difference
-            ),
-
-            "change_difference_raw": (
-                change_difference
-            ),
-
-            "oi_difference": format_number(
-                oi_difference
-            ),
-
-            "oi_difference_raw": oi_difference,
         })
-
-    except requests.Timeout:
-        return jsonify({
-            "error": (
-                "Upstox API timeout. "
-                "થોડીવાર પછી refresh કરો."
-            )
-        }), 504
-
-    except requests.RequestException as error:
-        return jsonify({
-            "error": f"Upstox API error: {error}"
-        }), 502
 
     except Exception as error:
         return jsonify({
@@ -679,1446 +648,312 @@ def option_chain_api():
 
 
 # =========================================================
-# HTML / CSS / JAVASCRIPT
+# HTML
 # =========================================================
 
 HTML = """
 <!DOCTYPE html>
-
 <html lang="gu">
 
 <head>
-
-    <meta charset="UTF-8">
-
-    <meta
-        name="viewport"
-        content="
-            width=device-width,
-            initial-scale=1,
-            maximum-scale=1,
-            user-scalable=no
-        "
-    >
-
-    <title>NIFTY OI Dashboard</title>
-
-    <style>
-
-        * {
-            box-sizing: border-box;
-        }
-
-        body {
-            margin: 0;
-            padding: 7px;
-
-            background: #f3f5f8;
-
-            font-family:
-                Arial,
-                sans-serif;
-
-            color: #151515;
-        }
-
-        .card {
-            background: white;
-
-            border-radius: 17px;
-
-            padding: 13px;
-
-            margin: 8px 2px;
-
-            box-shadow:
-                0 3px 9px
-                rgba(0, 0, 0, 0.11);
-        }
-
-        .top-card {
-            padding: 15px;
-        }
-
-        .nifty-line {
-            display: flex;
-
-            align-items: center;
-            justify-content: space-between;
-
-            gap: 8px;
-        }
-
-        .nifty-label {
-            font-size: 17px;
-            color: #555;
-        }
-
-        .nifty-price {
-            font-size: 29px;
-
-            font-weight: 900;
-
-            white-space: nowrap;
-        }
-
-        .top-info {
-            display: grid;
-
-            grid-template-columns:
-                repeat(3, 1fr);
-
-            gap: 6px;
-
-            margin-top: 12px;
-        }
-
-        .top-box {
-            background: #f6f7f9;
-
-            border-radius: 12px;
-
-            text-align: center;
-
-            padding: 8px 4px;
-        }
-
-        .mini-label {
-            font-size: 11px;
-            color: #666;
-        }
-
-        .mini-value {
-            margin-top: 3px;
-
-            font-size: 16px;
-
-            font-weight: 900;
-        }
-
-        .signal {
-            border-radius: 16px;
-
-            padding: 14px 10px;
-
-            margin: 8px 2px;
-
-            text-align: center;
-
-            font-size: 18px;
-
-            font-weight: 900;
-
-            line-height: 1.4;
-        }
-
-        .signal-message {
-            margin-top: 5px;
-
-            font-size: 13px;
-
-            font-weight: 600;
-        }
-
-        h2 {
-            margin: 4px 0 12px;
-
-            font-size: 21px;
-        }
-
-        .strike-list {
-            display: flex;
-
-            flex-direction: column;
-
-            gap: 7px;
-        }
-
-        .strike-row {
-            display: grid;
-
-            grid-template-columns:
-                minmax(0, 1fr)
-                78px
-                minmax(0, 1fr);
-
-            gap: 6px;
-
-            align-items: stretch;
-
-            border:
-                1px solid #e1e4e8;
-
-            border-radius: 14px;
-
-            padding: 6px;
-
-            background: white;
-        }
-
-        .atm-row {
-            border: 3px solid #e5ad00;
-
-            background: #fff6d2;
-        }
-
-        .resistance-row {
-            border-left:
-                5px solid #e63b3b;
-        }
-
-        .support-row {
-            border-right:
-                5px solid #15933a;
-        }
-
-        .balanced-row {
-            border-left:
-                5px solid #e2b100;
-
-            border-right:
-                5px solid #e2b100;
-        }
-
-        .side-box {
-            border-radius: 10px;
-
-            padding: 8px 5px;
-
-            text-align: center;
-
-            background: #f7f8fa;
-
-            min-width: 0;
-        }
-
-        .call-box {
-            background: #fff0f0;
-        }
-
-        .put-box {
-            background: #ecfbed;
-        }
-
-        .side-heading {
-            font-size: 13px;
-
-            font-weight: 900;
-        }
-
-        .oi-label {
-            margin-top: 5px;
-
-            font-size: 10px;
-
-            color: #666;
-        }
-
-        .oi-value {
-            margin-top: 2px;
-
-            font-size: 17px;
-
-            font-weight: 900;
-
-            word-break: break-word;
-        }
-
-        .change-label {
-            margin-top: 7px;
-
-            font-size: 10px;
-
-            color: #666;
-        }
-
-        .change-value {
-            margin-top: 2px;
-
-            font-size: 16px;
-
-            font-weight: 900;
-
-            word-break: break-word;
-        }
-
-        .total-label {
-            margin-top: 7px;
-
-            font-size: 10px;
-
-            color: #666;
-        }
-
-        .total-value {
-            margin-top: 2px;
-
-            font-size: 14px;
-
-            font-weight: 900;
-        }
-
-        .strike-center {
-            border-radius: 10px;
-
-            background: #f1f3f5;
-
-            text-align: center;
-
-            display: flex;
-
-            flex-direction: column;
-
-            justify-content: center;
-
-            padding: 6px 2px;
-        }
-
-        .strike-number {
-            font-size: 20px;
-
-            font-weight: 900;
-        }
-
-        .atm-text {
-            color: #9e6c00;
-
-            font-size: 12px;
-
-            font-weight: 900;
-
-            margin-top: 3px;
-        }
-
-        .status-text {
-            margin-top: 4px;
-
-            color: #555;
-
-            font-size: 9px;
-
-            font-weight: 800;
-        }
-
-        .badges {
-            margin-top: 4px;
-
-            min-height: 18px;
-        }
-
-        .badge {
-            display: inline-block;
-
-            padding: 3px 5px;
-
-            margin: 1px;
-
-            border-radius: 7px;
-
-            color: white;
-
-            font-size: 10px;
-
-            font-weight: 900;
-        }
-
-        .res-badge {
-            background: #e12828;
-        }
-
-        .sup-badge {
-            background: #128833;
-        }
-
-        .green {
-            color: #078624;
-        }
-
-        .red {
-            color: #e01d1d;
-        }
-
-        .blue {
-            color: #0754c7;
-        }
-
-        .neutral {
-            color: #444;
-        }
-
-        .levels-grid {
-            display: grid;
-
-            grid-template-columns:
-                1fr 1fr;
-
-            gap: 9px;
-        }
-
-        .level-box {
-            border-radius: 15px;
-
-            padding: 14px 7px;
-
-            text-align: center;
-        }
-
-        .resistance-box {
-            background: #ffe7e7;
-
-            border:
-                2px solid #e32c2c;
-        }
-
-        .support-box {
-            background: #e3f9e8;
-
-            border:
-                2px solid #15933a;
-        }
-
-        .level-title {
-            font-size: 14px;
-
-            font-weight: 900;
-        }
-
-        .level-strike {
-            margin-top: 6px;
-
-            font-size: 31px;
-
-            font-weight: 900;
-        }
-
-        .level-total {
-            margin-top: 6px;
-
-            font-size: 20px;
-
-            font-weight: 900;
-        }
-
-        .level-detail {
-            margin-top: 5px;
-
-            font-size: 14px;
-
-            font-weight: 800;
-
-            line-height: 1.35;
-        }
-
-        .rank-section {
-            margin-top: 13px;
-
-            display: grid;
-
-            grid-template-columns:
-                1fr 1fr;
-
-            gap: 8px;
-        }
-
-        .rank-box {
-            background: #f7f8fa;
-
-            padding: 9px 7px;
-
-            border-radius: 12px;
-        }
-
-        .rank-title {
-            text-align: center;
-
-            font-size: 13px;
-
-            font-weight: 900;
-
-            margin-bottom: 7px;
-        }
-
-        .rank-line {
-            padding: 6px 2px;
-
-            border-bottom:
-                1px solid #ddd;
-
-            font-size: 13px;
-
-            font-weight: 700;
-
-            line-height: 1.4;
-        }
-
-        .rank-line:last-child {
-            border-bottom: none;
-        }
-
-        .summary-grid {
-            display: grid;
-
-            grid-template-columns:
-                1fr 1fr;
-
-            gap: 7px;
-        }
-
-        .summary-box {
-            background: #f6f7f9;
-
-            border-radius: 12px;
-
-            padding: 10px 5px;
-
-            text-align: center;
-        }
-
-        .summary-label {
-            font-size: 11px;
-
-            color: #666;
-        }
-
-        .summary-value {
-            margin-top: 4px;
-
-            font-size: 18px;
-
-            font-weight: 900;
-        }
-
-        .footer {
-            text-align: center;
-
-            color: #777;
-
-            font-size: 11px;
-
-            padding: 10px;
-        }
-
-        @media (max-width: 390px) {
-
-            body {
-                padding: 4px;
-            }
-
-            .card {
-                padding: 10px;
-
-                margin: 6px 1px;
-            }
-
-            .nifty-price {
-                font-size: 26px;
-            }
-
-            .strike-row {
-                grid-template-columns:
-                    minmax(0, 1fr)
-                    69px
-                    minmax(0, 1fr);
-
-                gap: 4px;
-
-                padding: 5px;
-            }
-
-            .side-box {
-                padding: 7px 3px;
-            }
-
-            .oi-value {
-                font-size: 15px;
-            }
-
-            .change-value {
-                font-size: 14px;
-            }
-
-            .total-value {
-                font-size: 13px;
-            }
-
-            .strike-number {
-                font-size: 17px;
-            }
-
-            .level-strike {
-                font-size: 26px;
-            }
-
-            .level-total {
-                font-size: 17px;
-            }
-
-            .level-detail {
-                font-size: 12px;
-            }
-
-        }
-
-    </style>
-
-</head>
-
-<body>
-
-    <div class="card top-card">
-
-        <div class="nifty-line">
-
-            <span class="nifty-label">
-                NIFTY LIVE
-            </span>
-
-            <span
-                class="nifty-price"
-                id="nifty"
-            >
-                Loading...
-            </span>
-
-        </div>
-
-        <div class="top-info">
-
-            <div class="top-box">
-
-                <div class="mini-label">
-                    ATM
-                </div>
-
-                <div
-                    class="mini-value"
-                    id="atm"
-                >
-                    -
-                </div>
-
-            </div>
-
-            <div class="top-box">
-
-                <div class="mini-label">
-                    PCR
-                </div>
-
-                <div
-                    class="mini-value"
-                    id="pcr"
-                >
-                    -
-                </div>
-
-            </div>
-
-            <div class="top-box">
-
-                <div class="mini-label">
-                    Updated
-                </div>
-
-                <div
-                    class="mini-value"
-                    id="updated"
-                >
-                    -
-                </div>
-
-            </div>
-
-        </div>
-
-    </div>
-
-    <div
-        class="signal"
-        id="marketSignal"
-    >
-        Data loading...
-    </div>
-
-    <div class="card">
-
-        <h2>
-            ATM ±5 Strikes
-        </h2>
-
-        <div
-            class="strike-list"
-            id="strikeList"
-        ></div>
-
-    </div>
-
-    <div class="card">
-
-        <h2>
-            Strong Resistance / Support
-        </h2>
-
-        <div class="levels-grid">
-
-            <div
-                class="
-                    level-box
-                    resistance-box
-                "
-            >
-
-                <div
-                    class="
-                        level-title
-                        red
-                    "
-                >
-                    STRONG RESISTANCE
-                </div>
-
-                <div
-                    class="
-                        level-strike
-                        red
-                    "
-                    id="resStrike"
-                >
-                    -
-                </div>
-
-                <div
-                    class="
-                        level-total
-                        red
-                    "
-                    id="resTotal"
-                >
-                    -
-                </div>
-
-                <div
-                    class="level-detail"
-                    id="resDetail"
-                >
-                    -
-                </div>
-
-            </div>
-
-            <div
-                class="
-                    level-box
-                    support-box
-                "
-            >
-
-                <div
-                    class="
-                        level-title
-                        green
-                    "
-                >
-                    STRONG SUPPORT
-                </div>
-
-                <div
-                    class="
-                        level-strike
-                        green
-                    "
-                    id="supStrike"
-                >
-                    -
-                </div>
-
-                <div
-                    class="
-                        level-total
-                        green
-                    "
-                    id="supTotal"
-                >
-                    -
-                </div>
-
-                <div
-                    class="level-detail"
-                    id="supDetail"
-                >
-                    -
-                </div>
-
-            </div>
-
-        </div>
-
-        <div class="rank-section">
-
-            <div class="rank-box">
-
-                <div
-                    class="
-                        rank-title
-                        red
-                    "
-                >
-                    Resistance Ranking
-                </div>
-
-                <div
-                    id="resistanceRanking"
-                ></div>
-
-            </div>
-
-            <div class="rank-box">
-
-                <div
-                    class="
-                        rank-title
-                        green
-                    "
-                >
-                    Support Ranking
-                </div>
-
-                <div
-                    id="supportRanking"
-                ></div>
-
-            </div>
-
-        </div>
-
-    </div>
-
-    <div class="card">
-
-        <h2>
-            Overall Summary
-        </h2>
-
-        <div class="summary-grid">
-
-            <div class="summary-box">
-
-                <div class="summary-label">
-                    Total Call OI
-                </div>
-
-                <div
-                    class="
-                        summary-value
-                        red
-                    "
-                    id="totalCallOi"
-                >
-                    -
-                </div>
-
-            </div>
-
-            <div class="summary-box">
-
-                <div class="summary-label">
-                    Total Put OI
-                </div>
-
-                <div
-                    class="
-                        summary-value
-                        green
-                    "
-                    id="totalPutOi"
-                >
-                    -
-                </div>
-
-            </div>
-
-            <div class="summary-box">
-
-                <div class="summary-label">
-                    Call OI Change
-                </div>
-
-                <div
-                    class="summary-value"
-                    id="totalCallChange"
-                >
-                    -
-                </div>
-
-            </div>
-
-            <div class="summary-box">
-
-                <div class="summary-label">
-                    Put OI Change
-                </div>
-
-                <div
-                    class="summary-value"
-                    id="totalPutChange"
-                >
-                    -
-                </div>
-
-            </div>
-
-            <div class="summary-box">
-
-                <div class="summary-label">
-                    Put − Call Change
-                </div>
-
-                <div
-                    class="summary-value"
-                    id="changeDifference"
-                >
-                    -
-                </div>
-
-            </div>
-
-            <div class="summary-box">
-
-                <div class="summary-label">
-                    Expiry
-                </div>
-
-                <div
-                    class="summary-value"
-                    id="expiry"
-                >
-                    -
-                </div>
-
-            </div>
-
-        </div>
-
-    </div>
-
-    <div class="footer">
-        Auto refresh every 3 seconds
-    </div>
-
-<script>
-
-    function changeClass(value) {
-
-        const number = Number(value || 0);
-
-        if (number > 0) {
-            return "green";
-        }
-
-        if (number < 0) {
-            return "red";
-        }
-
-        return "neutral";
-
+<meta charset="UTF-8">
+
+<meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+>
+
+<title>NIFTY OI Dashboard</title>
+
+<style>
+*{
+    box-sizing:border-box;
+}
+
+body{
+    margin:0;
+    padding:7px;
+    background:#f3f5f8;
+    font-family:Arial,sans-serif;
+    color:#151515;
+}
+
+.card{
+    background:#fff;
+    border-radius:18px;
+    padding:13px;
+    margin:8px 2px;
+    box-shadow:0 3px 9px rgba(0,0,0,.11);
+}
+
+.top-line{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:8px;
+}
+
+.nifty-label{
+    font-size:18px;
+    color:#555;
+}
+
+.nifty-price{
+    font-size:29px;
+    font-weight:900;
+}
+
+.top-grid{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:7px;
+    margin-top:12px;
+}
+
+.top-box,
+.summary-box{
+    background:#f5f7f9;
+    border-radius:13px;
+    padding:9px 5px;
+    text-align:center;
+}
+
+.label{
+    color:#666;
+    font-size:11px;
+}
+
+.value{
+    margin-top:3px;
+    font-weight:900;
+    font-size:17px;
+}
+
+.signal{
+    border-radius:17px;
+    padding:14px 9px;
+    margin:8px 2px;
+    text-align:center;
+    font-size:19px;
+    font-weight:900;
+    line-height:1.4;
+}
+
+.signal small{
+    display:block;
+    margin-top:5px;
+    font-size:13px;
+    font-weight:600;
+}
+
+h2{
+    font-size:21px;
+    margin:3px 0 12px;
+}
+
+.strike-row{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) 74px minmax(0,1fr);
+    gap:6px;
+    border:1px solid #ddd;
+    border-radius:14px;
+    padding:6px;
+    margin:7px 0;
+}
+
+.atm-row{
+    background:#fff4c9;
+    border:3px solid #dda800;
+}
+
+.side-box{
+    border-radius:11px;
+    text-align:center;
+    padding:8px 4px;
+}
+
+.call-box{
+    background:#fff0f0;
+}
+
+.put-box{
+    background:#ebfaed;
+}
+
+.red{
+    color:#df1d1d;
+}
+
+.green{
+    color:#078524;
+}
+
+.blue{
+    color:#0754c7;
+}
+
+.heading{
+    font-size:13px;
+    font-weight:900;
+}
+
+.data-value{
+    font-size:16px;
+    font-weight:900;
+    margin-top:2px;
+}
+
+.change-value{
+    font-size:15px;
+    font-weight:900;
+    margin-top:2px;
+}
+
+.total-value{
+    font-size:14px;
+    font-weight:900;
+    margin-top:2px;
+}
+
+.center{
+    border-radius:10px;
+    background:#f0f2f4;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    align-items:center;
+    text-align:center;
+    padding:5px 2px;
+}
+
+.strike-number{
+    font-size:19px;
+    font-weight:900;
+}
+
+.atm-text{
+    color:#9e7000;
+    font-size:11px;
+    font-weight:900;
+    margin-top:2px;
+}
+
+.badge{
+    display:inline-block;
+    margin-top:3px;
+    padding:2px 5px;
+    border-radius:6px;
+    color:white;
+    font-size:10px;
+    font-weight:900;
+}
+
+.res-badge{
+    background:#df2323;
+}
+
+.sup-badge{
+    background:#148c34;
+}
+
+.level-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:9px;
+}
+
+.level-box{
+    border-radius:16px;
+    padding:14px 7px;
+    text-align:center;
+}
+
+.res-box{
+    background:#ffe5e5;
+    border:2px solid #e42626;
+}
+
+.sup-box{
+    background:#e2f8e7;
+    border:2px solid #139039;
+}
+
+.level-title{
+    font-size:14px;
+    font-weight:900;
+}
+
+.level-strike{
+    font-size:30px;
+    font-weight:900;
+    margin-top:6px;
+}
+
+.level-total{
+    font-size:19px;
+    font-weight:900;
+    margin-top:5px;
+}
+
+.level-detail{
+    font-size:13px;
+    font-weight:800;
+    line-height:1.45;
+    margin-top:5px;
+}
+
+.rank-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:8px;
+    margin-top:12px;
+}
+
+.rank-box{
+    border-radius:13px;
+    background:#f5f7f9;
+    padding:9px 6px;
+    text-align:center;
+}
+
+.rank-title{
+    font-size:13px;
+    font-weight:900;
+    margin-bottom:6px;
+}
+
+.rank-row{
+    padding:5px 0;
+    border-bottom:1px solid #ddd;
+    font-size:12px;
+    font-weight:800;
+    line-height:1.4;
+}
+
+.rank-row:last-child{
+    border-bottom:none;
+}
+
+.summary-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:7px;
+}
+
+.footer{
+    text-align:center;
+    font-size:11px;
+    color:#777;
+    padding:10px;
+}
+
+@media(max-width:390px){
+    body{
+        padding:4px;
     }
 
-
-    function makeStrikeRows(rows) {
-
-        let html = "";
-
-        rows.forEach(row => {
-
-            const atmClass = (
-                row.is_atm
-                ? "atm-row"
-                : ""
-            );
-
-            html += `
-                <div
-                    class="
-                        strike-row
-                        ${row.row_class}
-                        ${atmClass}
-                    "
-                >
-
-                    <div
-                        class="
-                            side-box
-                            call-box
-                        "
-                    >
-
-                        <div
-                            class="
-                                side-heading
-                                red
-                            "
-                        >
-                            CALL
-                        </div>
-
-                        <div class="oi-label">
-                            OI
-                        </div>
-
-                        <div
-                            class="
-                                oi-value
-                                red
-                            "
-                        >
-                            ${row.call_oi}
-                        </div>
-
-                        <div class="change-label">
-                            OI Change
-                        </div>
-
-                        <div
-                            class="
-                                change-value
-                                ${changeClass(
-                                    row.call_change_raw
-                                )}
-                            "
-                        >
-                            ${row.call_change}
-                        </div>
-
-                        <div class="total-label">
-                            Total
-                        </div>
-
-                        <div
-                            class="
-                                total-value
-                                red
-                            "
-                        >
-                            ${row.call_total}
-                        </div>
-
-                    </div>
-
-                    <div class="strike-center">
-
-                        <div class="strike-number">
-                            ${row.strike}
-                        </div>
-
-                        ${
-                            row.is_atm
-                            ? `
-                                <div class="atm-text">
-                                    ATM
-                                </div>
-                              `
-                            : ""
-                        }
-
-                        <div class="badges">
-
-                            ${
-                                row.resistance_badge
-                                ? `
-                                    <span
-                                        class="
-                                            badge
-                                            res-badge
-                                        "
-                                    >
-                                        ${row.resistance_badge}
-                                    </span>
-                                  `
-                                : ""
-                            }
-
-                            ${
-                                row.support_badge
-                                ? `
-                                    <span
-                                        class="
-                                            badge
-                                            sup-badge
-                                        "
-                                    >
-                                        ${row.support_badge}
-                                    </span>
-                                  `
-                                : ""
-                            }
-
-                        </div>
-
-                        <div class="status-text">
-                            ${row.row_status}
-                        </div>
-
-                    </div>
-
-                    <div
-                        class="
-                            side-box
-                            put-box
-                        "
-                    >
-
-                        <div
-                            class="
-                                side-heading
-                                green
-                            "
-                        >
-                            PUT
-                        </div>
-
-                        <div class="oi-label">
-                            OI
-                        </div>
-
-                        <div
-                            class="
-                                oi-value
-                                green
-                            "
-                        >
-                            ${row.put_oi}
-                        </div>
-
-                        <div class="change-label">
-                            OI Change
-                        </div>
-
-                        <div
-                            class="
-                                change-value
-                                ${changeClass(
-                                    row.put_change_raw
-                                )}
-                            "
-                        >
-                            ${row.put_change}
-                        </div>
-
-                        <div class="total-label">
-                            Total
-                        </div>
-
-                        <div
-                            class="
-                                total-value
-                                green
-                            "
-                        >
-                            ${row.put_total}
-                        </div>
-
-                    </div>
-
-                </div>
-            `;
-
-        });
-
-        return html;
-
+    .card{
+        padding:10px;
     }
 
-
-    function makeRanking(
-        items,
-        sideClass
-    ) {
-
-        return items.map(item => `
-            <div
-                class="
-                    rank-line
-                    ${sideClass}
-                "
-            >
-                ${item.rank})
-                ${item.strike}
-
-                <br>
-
-                OI ${item.oi}
-
-                <br>
-
-                Change ${item.change}
-
-                <br>
-
-                Total ${item.total}
-            </div>
-        `).join("");
-
-    }
-
-
-    async function loadData() {
-
-        const marketSignal =
-            document.getElementById(
-                "marketSignal"
-            );
-
-        try {
-
-            const response = await fetch(
-                `/api?t=${Date.now()}`,
-                {
-                    cache: "no-store"
-                }
-            );
-
-            const data =
-                await response.json();
-
-            if (
-                !response.ok
-                || data.error
-            ) {
-                throw new Error(
-                    data.error
-                    || "Data load failed"
-                );
-            }
-
-            document.getElementById(
-                "nifty"
-            ).innerText = data.nifty;
-
-            document.getElementById(
-                "atm"
-            ).innerText = data.atm;
-
-            document.getElementById(
-                "pcr"
-            ).innerText = data.pcr;
-
-            document.getElementById(
-                "updated"
-            ).innerText = data.time;
-
-            document.getElementById(
-                "expiry"
-            ).innerText = data.expiry;
-
-            marketSignal.innerHTML = `
-                ${data.market_view}
-
-                <div class="signal-message">
-                    ${data.market_message}
-                </div>
-            `;
-
-            marketSignal.style.background =
-                data.market_color;
-
-            document.getElementById(
-                "strikeList"
-            ).innerHTML = makeStrikeRows(
-                data.rows
-            );
-
-            document.getElementById(
-                "resStrike"
-            ).innerText =
-                data
-                .strongest_resistance
-                .strike;
-
-            document.getElementById(
-                "resTotal"
-            ).innerText =
-                `Total ${
-                    data
-                    .strongest_resistance
-                    .total
-                }`;
-
-            document.getElementById(
-                "resDetail"
-            ).innerHTML = `
-                Call OI
-                ${
-                    data
-                    .strongest_resistance
-                    .oi
-                }
-
-                <br>
-
-                Change
-                ${
-                    data
-                    .strongest_resistance
-                    .change
-                }
-            `;
-
-            document.getElementById(
-                "supStrike"
-            ).innerText =
-                data
-                .strongest_support
-                .strike;
-
-            document.getElementById(
-                "supTotal"
-            ).innerText =
-                `Total ${
-                    data
-                    .strongest_support
-                    .total
-                }`;
-
-            document.getElementById(
-                "supDetail"
-            ).innerHTML = `
-                Put OI
-                ${
-                    data
-                    .strongest_support
-                    .oi
-                }
-
-                <br>
-
-                Change
-                ${
-                    data
-                    .strongest_support
-                    .change
-                }
-            `;
-
-            document.getElementById(
-                "resistanceRanking"
-            ).innerHTML = makeRanking(
-                data.resistance_list,
-                "red"
-            );
-
-            document.getElementById(
-                "supportRanking"
-            ).innerHTML = makeRanking(
-                data.support_list,
-                "green"
-            );
-
-            document.getElementById(
-                "totalCallOi"
-            ).innerText =
-                data.total_call_oi;
-
-            document.getElementById(
-                "totalPutOi"
-            ).innerText =
-                data.total_put_oi;
-
-            const callChange =
-                document.getElementById(
-                    "totalCallChange"
-                );
-
-            callChange.innerText =
-                data.total_call_change;
-
-            callChange.className = `
-                summary-value
-                ${changeClass(
-                    data.total_call_change_raw
-                )}
-            `;
-
-            const putChange =
-                document.getElementById(
-                    "totalPutChange"
-                );
-
-            putChange.innerText =
-                data.total_put_change;
-
-            putChange.className = `
-                summary-value
-                ${changeClass(
-                    data.total_put_change_raw
-                )}
-            `;
-
-            const changeDiff =
-                document.getElementById(
-                    "changeDifference"
-                );
-
-            changeDiff.innerText =
-                data.change_difference;
-
-            changeDiff.className = `
-                summary-value
-                ${changeClass(
-                    data.change_difference_raw
-                )}
-            `;
-
-        } catch (error) {
-
-            marketSignal.innerText =
-                error.message;
-
-            marketSignal.style.background =
-                "#ffe1e1";
-
-        }
-
-    }
-
-
-    loadData();
-
-    setInterval(
-        loadData,
-        3000
-    );
-
-</script>
-
-</body>
-
-</html>
-"""
-
-
-# =========================================================
-# HOME ROUTE
-# =========================================================
-
-@app.route("/")
-def home():
-    return render_template_string(HTML)
-
-
-# =========================================================
-# LOCAL / RENDER START
-# =========================================================
-
-if __name__ == "__main__":
-    port = int(
-        os.environ.get(
-            "PORT",
-            5000,
-        )
-    )
-
-    app.run(
-        host="0.0.0.0",
-        port=port,
-        debug=False,
-    )
+   
