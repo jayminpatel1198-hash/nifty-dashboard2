@@ -1,122 +1,92 @@
 from flask import Flask, jsonify, render_template_string
-from datetime import datetime, date
+from datetime import datetime
 import os
 import requests
 
 app = Flask(__name__)
 
 TOKEN = os.environ.get("UPSTOX_TOKEN", "").strip()
-
-UNDERLYING = "NSE_INDEX|Nifty 50"
-STRIKE_STEP = 50
-SIDE_STRIKES = 5
-TIMEOUT = 18
-
-CHAIN_URL = "https://api.upstox.com/v2/option/chain"
-CONTRACT_URL = "https://api.upstox.com/v2/option/contract"
+INDEX_KEY = "NSE_INDEX|Nifty 50"
+URL = "https://api.upstox.com/v2/option/chain"
+STEP = 50
+SIDE = 5
 
 
-# =========================================================
-# HELPERS
-# =========================================================
-
-def api_headers():
-    if not TOKEN:
-        raise RuntimeError(
-            "UPSTOX_TOKEN missing છે. Render Environment માં token add કરો."
-        )
-
-    return {
-        "Accept": "application/json",
-        "Authorization": f"Bearer {TOKEN}",
-    }
-
-
-def safe_float(value):
+def number(value):
     try:
         return float(value or 0)
     except (TypeError, ValueError):
         return 0.0
 
 
-def format_number(value):
-    number = safe_float(value)
+def short(value):
+    value = number(value)
 
-    if abs(number) < 0.5:
+    if abs(value) < 0.5:
         return "0"
 
-    sign = "+" if number > 0 else "-"
-    number = abs(number)
+    sign = "+" if value > 0 else "-"
+    value = abs(value)
 
-    if number >= 10_000_000:
-        return f"{sign}{number / 10_000_000:.2f}Cr"
+    if value >= 10000000:
+        return f"{sign}{value / 10000000:.2f}Cr"
+    if value >= 100000:
+        return f"{sign}{value / 100000:.2f}L"
+    if value >= 1000:
+        return f"{sign}{value / 1000:.1f}K"
 
-    if number >= 100_000:
-        return f"{sign}{number / 100_000:.2f}L"
-
-    if number >= 1_000:
-        return f"{sign}{number / 1_000:.1f}K"
-
-    return f"{sign}{number:.0f}"
+    return f"{sign}{value:.0f}"
 
 
-def get_oi_change(market_data):
-    direct_keys = [
+def oi_change(market):
+    for key in (
         "oi_day_change",
         "oi_change",
         "change_oi",
         "change_in_oi",
         "oi_change_value",
-    ]
-
-    for key in direct_keys:
-        value = market_data.get(key)
+    ):
+        value = market.get(key)
 
         if value not in (None, ""):
-            return safe_float(value)
+            return number(value)
 
-    current_oi = safe_float(
-        market_data.get("oi")
-    )
+    current = number(market.get("oi"))
 
-    previous_oi = safe_float(
-        market_data.get("prev_oi")
-        or market_data.get("previous_oi")
-        or market_data.get("close_oi")
+    previous = number(
+        market.get("prev_oi")
+        or market.get("previous_oi")
+        or market.get("close_oi")
         or 0
     )
 
-    if previous_oi:
-        return current_oi - previous_oi
-
-    return 0.0
+    return current - previous if previous else 0.0
 
 
-def request_json(url, params):
-    try:
-        response = requests.get(
-            url,
-            headers=api_headers(),
-            params=params,
-            timeout=TIMEOUT,
-        )
-
-    except requests.Timeout:
+def fetch_chain():
+    if not TOKEN:
         raise RuntimeError(
-            "Upstox API timeout. ફરી refresh કરો."
+            "UPSTOX_TOKEN missing છે."
         )
 
-    except requests.RequestException as error:
-        raise RuntimeError(
-            f"Upstox connection error: {error}"
-        )
+    response = requests.get(
+        URL,
+        headers={
+            "Accept": "application/json",
+            "Authorization": f"Bearer {TOKEN}",
+        },
+        params={
+            "instrument_key": INDEX_KEY,
+            "expiry_date": "current_week",
+        },
+        timeout=15,
+    )
 
     try:
         payload = response.json()
-
     except ValueError:
         raise RuntimeError(
-            f"Upstox invalid response. HTTP {response.status_code}"
+            f"Upstox response error: {response.status_code}"
         )
 
     if response.status_code == 401:
@@ -127,105 +97,21 @@ def request_json(url, params):
     if not response.ok:
         raise RuntimeError(
             payload.get("message")
-            or f"Upstox HTTP {response.status_code}"
+            or f"Upstox error {response.status_code}"
         )
 
-    if payload.get("status") != "success":
+    data = payload.get("data", [])
+
+    if not data:
         raise RuntimeError(
-            payload.get("message")
-            or str(payload)
+            "Current-week option-chain data મળ્યો નથી."
         )
 
-    return payload
+    return data
 
 
-# =========================================================
-# EXPIRY + OPTION CHAIN
-# =========================================================
-
-def get_active_expiries():
-    try:
-        payload = request_json(
-            CONTRACT_URL,
-            {
-                "instrument_key": UNDERLYING
-            },
-        )
-
-        today_text = date.today().isoformat()
-
-        expiries = sorted({
-            str(item.get("expiry"))
-            for item in payload.get("data", [])
-            if item.get("expiry")
-            and str(item.get("expiry")) >= today_text
-        })
-
-        return expiries
-
-    except Exception:
-        return []
-
-
-def fetch_option_chain():
-    expiry_attempts = ["current_week"]
-
-    expiry_attempts.extend(
-        get_active_expiries()[:8]
-    )
-
-    expiry_attempts.extend([
-        "next_week",
-        "current_month",
-    ])
-
-    already_checked = set()
-    last_error = None
-
-    for expiry_value in expiry_attempts:
-        if expiry_value in already_checked:
-            continue
-
-        already_checked.add(expiry_value)
-
-        try:
-            payload = request_json(
-                CHAIN_URL,
-                {
-                    "instrument_key": UNDERLYING,
-                    "expiry_date": expiry_value,
-                },
-            )
-
-            data = payload.get("data", [])
-
-            if data:
-                actual_expiry = (
-                    data[0].get("expiry")
-                    or expiry_value
-                )
-
-                return data, actual_expiry
-
-        except Exception as error:
-            last_error = str(error)
-
-    raise RuntimeError(
-        last_error
-        or "Active NIFTY Option Chain data મળ્યો નથી."
-    )
-
-
-# =========================================================
-# PREPARE ONE STRIKE
-# =========================================================
-
-def make_strike_row(item, atm):
-    strike = int(
-        safe_float(
-            item.get("strike_price")
-        )
-    )
+def prepare_row(item, atm):
+    strike = int(number(item.get("strike_price")))
 
     call_market = (
         item.get("call_options", {})
@@ -237,24 +123,12 @@ def make_strike_row(item, atm):
         .get("market_data", {})
     )
 
-    call_oi = safe_float(
-        call_market.get("oi")
-    )
+    call_oi = number(call_market.get("oi"))
+    put_oi = number(put_market.get("oi"))
 
-    put_oi = safe_float(
-        put_market.get("oi")
-    )
+    call_change = oi_change(call_market)
+    put_change = oi_change(put_market)
 
-    call_change = get_oi_change(
-        call_market
-    )
-
-    put_change = get_oi_change(
-        put_market
-    )
-
-    # User requested Total:
-    # Total = Current OI + OI Change
     call_total = call_oi + call_change
     put_total = put_oi + put_change
 
@@ -270,74 +144,60 @@ def make_strike_row(item, atm):
         "put_change_raw": put_change,
         "put_total_raw": put_total,
 
-        "call_oi": format_number(call_oi),
-        "call_change": format_number(call_change),
-        "call_total": format_number(call_total),
+        "call_oi": short(call_oi),
+        "call_change": short(call_change),
+        "call_total": short(call_total),
 
-        "put_oi": format_number(put_oi),
-        "put_change": format_number(put_change),
-        "put_total": format_number(put_total),
+        "put_oi": short(put_oi),
+        "put_change": short(put_change),
+        "put_total": short(put_total),
     }
 
 
-# =========================================================
-# API
-# =========================================================
-
 @app.route("/api")
-def dashboard_api():
+def api():
     try:
-        chain, expiry = fetch_option_chain()
+        chain = fetch_chain()
 
-        nifty_price = 0.0
+        nifty = 0.0
+        expiry = "current_week"
 
         for item in chain:
-            spot = safe_float(
+            spot = number(
                 item.get("underlying_spot_price")
             )
 
             if spot > 0:
-                nifty_price = spot
+                nifty = spot
+
+            if item.get("expiry"):
+                expiry = item.get("expiry")
+
+            if nifty > 0:
                 break
 
-        if nifty_price <= 0:
+        if nifty <= 0:
             raise RuntimeError(
                 "NIFTY live price મળ્યો નથી."
             )
 
-        # NIFTY બદલાય ત્યારે ATM auto બદલાશે
-        atm = int(
-            round(nifty_price / STRIKE_STEP)
-            * STRIKE_STEP
-        )
+        atm = int(round(nifty / STEP) * STEP)
 
-        required_strikes = {
-            atm
-        }
+        needed = {atm}
 
-        for number in range(
-            1,
-            SIDE_STRIKES + 1,
-        ):
-            required_strikes.add(
-                atm + number * STRIKE_STEP
-            )
-
-            required_strikes.add(
-                atm - number * STRIKE_STEP
-            )
+        for count in range(1, SIDE + 1):
+            needed.add(atm + count * STEP)
+            needed.add(atm - count * STEP)
 
         strike_map = {}
 
         for item in chain:
             strike = int(
-                safe_float(
-                    item.get("strike_price")
-                )
+                number(item.get("strike_price"))
             )
 
-            if strike in required_strikes:
-                strike_map[strike] = make_strike_row(
+            if strike in needed:
+                strike_map[strike] = prepare_row(
                     item,
                     atm,
                 )
@@ -347,129 +207,71 @@ def dashboard_api():
                 "ATM strike data મળ્યો નથી."
             )
 
-        atm_data = strike_map[atm]
+        upper = []
+        lower = []
 
-        resistance_side = []
-        support_side = []
+        for count in range(1, SIDE + 1):
+            upper_strike = atm + count * STEP
+            lower_strike = atm - count * STEP
 
-        for number in range(
-            1,
-            SIDE_STRIKES + 1,
-        ):
-            resistance_strike = (
-                atm + number * STRIKE_STEP
-            )
+            if upper_strike in strike_map:
+                upper.append(strike_map[upper_strike])
 
-            support_strike = (
-                atm - number * STRIKE_STEP
-            )
+            if lower_strike in strike_map:
+                lower.append(strike_map[lower_strike])
 
-            if resistance_strike in strike_map:
-                resistance_side.append(
-                    strike_map[resistance_strike]
-                )
-
-            if support_strike in strike_map:
-                support_side.append(
-                    strike_map[support_strike]
-                )
-
-        if not resistance_side:
+        if not upper or not lower:
             raise RuntimeError(
-                "ATM ઉપરના strikes મળ્યા નથી."
+                "ATM આસપાસના strikes મળ્યા નથી."
             )
 
-        if not support_side:
-            raise RuntimeError(
-                "ATM નીચેના strikes મળ્યા નથી."
-            )
-
-        strongest_resistance = max(
-            resistance_side,
-            key=lambda row: row[
-                "call_total_raw"
-            ],
+        resistance = max(
+            upper,
+            key=lambda row: row["call_total_raw"],
         )
 
-        strongest_support = max(
-            support_side,
-            key=lambda row: row[
-                "put_total_raw"
-            ],
+        support = max(
+            lower,
+            key=lambda row: row["put_total_raw"],
         )
 
-        paired_rows = []
+        pairs = []
 
-        maximum_rows = max(
-            len(resistance_side),
-            len(support_side),
-        )
-
-        for index in range(maximum_rows):
-            paired_rows.append({
-                "resistance": (
-                    resistance_side[index]
-                    if index < len(resistance_side)
+        for index in range(SIDE):
+            pairs.append({
+                "upper": (
+                    upper[index]
+                    if index < len(upper)
                     else None
                 ),
-
-                "support": (
-                    support_side[index]
-                    if index < len(support_side)
+                "lower": (
+                    lower[index]
+                    if index < len(lower)
                     else None
                 ),
             })
 
         return jsonify({
-            "nifty": round(
-                nifty_price,
-                2,
-            ),
-
+            "nifty": round(nifty, 2),
             "atm": atm,
             "expiry": expiry,
+            "time": datetime.now().strftime("%H:%M:%S"),
 
-            "time": datetime.now().strftime(
-                "%H:%M:%S"
-            ),
+            "atm_data": strike_map[atm],
+            "pairs": pairs,
 
-            "atm_data": atm_data,
-            "paired_rows": paired_rows,
-
-            "strongest_resistance": {
-                "strike": strongest_resistance[
-                    "strike"
-                ],
-
-                "call_oi": strongest_resistance[
-                    "call_oi"
-                ],
-
-                "call_change": strongest_resistance[
-                    "call_change"
-                ],
-
-                "call_total": strongest_resistance[
-                    "call_total"
-                ],
+            "resistance": {
+                "strike": resistance["strike"],
+                "oi": resistance["call_oi"],
+                "change": resistance["call_change"],
+                "total": resistance["call_total"],
             },
 
-            "strongest_support": {
-                "strike": strongest_support[
-                    "strike"
-                ],
-
-                "put_oi": strongest_support[
-                    "put_oi"
-                ],
-
-                "put_change": strongest_support[
-                    "put_change"
-                ],
-
-                "put_total": strongest_support[
-                    "put_total"
-                ],
+            "support": {
+                "strike": support["strike"],
+                "oi": support["put_oi"],
+                "change": support["put_change"],
+                "total": support["put_total"],
             },
         })
 
@@ -479,612 +281,271 @@ def dashboard_api():
         }), 500
 
 
-# =========================================================
-# HTML
-# =========================================================
-
 HTML = """
-<!DOCTYPE html>
-
+<!doctype html>
 <html lang="gu">
-
 <head>
-
-<meta charset="UTF-8">
-
-<meta
-    name="viewport"
-    content="width=device-width,initial-scale=1"
->
-
-<title>NIFTY OI Dashboard</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NIFTY OI</title>
 
 <style>
-
-* {
-    box-sizing: border-box;
-}
-
-body {
-    margin: 0;
-    padding: 6px;
-    background: #f2f4f7;
-    font-family: Arial, sans-serif;
-    color: #151515;
-}
-
-.card {
-    background: white;
-    border-radius: 16px;
-    padding: 11px;
-    margin: 7px 1px;
-    box-shadow: 0 2px 8px rgba(0,0,0,.12);
-}
-
-.top-line {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.top-label {
-    color: #555;
-    font-size: 16px;
-}
-
-.nifty-price {
-    font-size: 28px;
-    font-weight: 900;
-}
-
-.top-info {
-    display: grid;
-    grid-template-columns: repeat(3,1fr);
-    gap: 6px;
-    margin-top: 10px;
-}
-
-.info-box {
-    background: #f5f7f9;
-    border-radius: 11px;
-    padding: 8px 3px;
-    text-align: center;
-}
-
-.small-label {
-    color: #666;
-    font-size: 10px;
-}
-
-.info-value {
-    margin-top: 2px;
-    font-size: 15px;
-    font-weight: 900;
-}
-
-h2 {
-    margin: 2px 0 10px;
-    font-size: 19px;
-}
-
-.red {
-    color: #df1d1d;
-}
-
-.green {
-    color: #078524;
-}
-
-.blue {
-    color: #0754c7;
-}
-
-.atm-card {
-    border: 3px solid #d9a300;
-    background: #fff4c9;
-}
-
-.atm-title {
-    text-align: center;
-    font-size: 22px;
-    font-weight: 900;
-    margin-bottom: 8px;
-}
-
-.atm-data-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 7px;
-}
-
-.data-side {
-    border-radius: 12px;
-    padding: 9px 5px;
-    text-align: center;
-}
-
-.call-side {
-    background: #fff0f0;
-}
-
-.put-side {
-    background: #eaf9ed;
-}
-
-.side-title {
-    font-size: 15px;
-    font-weight: 900;
-    margin-bottom: 7px;
-}
-
-.data-line {
-    display: flex;
-    justify-content: space-between;
-    gap: 4px;
-    padding: 4px 2px;
-    border-bottom: 1px solid rgba(0,0,0,.08);
-    font-size: 12px;
-}
-
-.data-line:last-child {
-    border-bottom: none;
-}
-
-.data-name {
-    color: #555;
-}
-
-.data-number {
-    font-weight: 900;
-}
-
-.total-line {
-    margin-top: 5px;
-    padding: 7px 3px;
-    border-radius: 9px;
-    font-size: 15px;
-    font-weight: 900;
-}
-
-.call-total {
-    background: #ffdcdc;
-    color: #c90000;
-}
-
-.put-total {
-    background: #d8f5de;
-    color: #007d22;
-}
-
-.headings {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 7px;
-    margin-bottom: 6px;
-}
-
-.heading-box {
-    padding: 9px 4px;
-    text-align: center;
-    border-radius: 11px;
-    font-size: 14px;
-    font-weight: 900;
-}
-
-.res-heading {
-    color: #c90000;
-    background: #ffe1e1;
-}
-
-.sup-heading {
-    color: #007d22;
-    background: #def6e3;
-}
-
-.pair-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 7px;
-    margin: 7px 0;
-}
-
-.strike-box {
-    background: #f7f8fa;
-    border-radius: 13px;
-    padding: 8px 5px;
-    border: 1px solid #ddd;
-}
-
-.resistance-strike {
-    border-left: 4px solid #df2626;
-}
-
-.support-strike {
-    border-right: 4px solid #158e36;
-}
-
-.strike-number {
-    text-align: center;
-    font-size: 19px;
-    font-weight: 900;
-    margin-bottom: 6px;
-}
-
-.mini-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 5px;
-}
-
-.mini-side {
-    border-radius: 9px;
-    padding: 6px 3px;
-    text-align: center;
-}
-
-.mini-call {
-    background: #fff0f0;
-}
-
-.mini-put {
-    background: #eaf9ed;
-}
-
-.mini-title {
-    font-size: 11px;
-    font-weight: 900;
-}
-
-.mini-label {
-    color: #666;
-    font-size: 9px;
-    margin-top: 4px;
-}
-
-.mini-value {
-    font-size: 12px;
-    font-weight: 900;
-    margin-top: 1px;
-}
-
-.mini-total {
-    margin-top: 5px;
-    padding: 5px 2px;
-    border-radius: 7px;
-    font-size: 12px;
-    font-weight: 900;
-}
-
-.level-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-}
-
-.level-box {
-    border-radius: 14px;
-    padding: 13px 5px;
-    text-align: center;
-}
-
-.res-level {
-    background: #ffe3e3;
-    border: 2px solid #dc2525;
-}
-
-.sup-level {
-    background: #e1f7e6;
-    border: 2px solid #148e36;
-}
-
-.level-title {
-    font-size: 13px;
-    font-weight: 900;
-}
-
-.level-strike {
-    margin-top: 5px;
-    font-size: 27px;
-    font-weight: 900;
-}
-
-.level-detail {
-    margin-top: 5px;
-    font-size: 13px;
-    font-weight: 800;
-    line-height: 1.45;
-}
-
-.error-box {
-    display: none;
-    background: #ffe1e1;
-    color: #a60000;
-    font-weight: 800;
-    text-align: center;
-}
-
-.footer {
-    padding: 9px;
-    text-align: center;
-    color: #777;
-    font-size: 11px;
-}
-
-@media(max-width:390px) {
-
-    body {
-        padding: 4px;
-    }
-
-    .card {
-        padding: 9px;
-    }
-
-    .nifty-price {
-        font-size: 25px;
-    }
-
-    .pair-row {
-        gap: 5px;
-    }
-
-    .strike-box {
-        padding: 7px 3px;
-    }
-
-    .mini-grid {
-        gap: 3px;
-    }
-
-    .mini-value {
-        font-size: 11px;
-    }
-
-    .mini-total {
-        font-size: 11px;
-    }
-
-    .strike-number {
-        font-size: 17px;
-    }
-
-}
-
+*{box-sizing:border-box}
+body{margin:0;padding:5px;background:#f2f4f7;font-family:Arial}
+.card{background:white;border-radius:14px;padding:10px;margin:7px 1px;box-shadow:0 2px 7px #ccc}
+.top{display:flex;justify-content:space-between;align-items:center}
+.price{font-size:27px;font-weight:900}
+.info{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-top:9px}
+.info div{background:#f5f7f9;text-align:center;padding:7px 2px;border-radius:9px}
+.label{font-size:9px;color:#666}
+.value{font-size:14px;font-weight:900}
+.red{color:#d71919}.green{color:#078524}
+.atm{background:#fff4c9;border:3px solid #d9a300}
+.title{text-align:center;font-size:20px;font-weight:900;margin-bottom:7px}
+.two,.pair,.levels{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.side,.strike,.level{border-radius:10px;padding:7px 3px;text-align:center}
+.call{background:#fff0f0}.put{background:#eaf9ed}
+.line{display:flex;justify-content:space-between;font-size:11px;padding:3px 1px}
+.total{margin-top:4px;padding:5px 1px;border-radius:7px;font-size:13px;font-weight:900}
+.calltotal{background:#ffdada;color:#c60000}
+.puttotal{background:#d7f4dd;color:#007b21}
+.head{font-weight:900;text-align:center;padding:7px;border-radius:9px;margin-bottom:5px}
+.reshead{background:#ffe1e1;color:#c60000}.suphead{background:#def6e3;color:#007b21}
+.pair{margin:6px 0}
+.strike{background:#f8f9fa;border:1px solid #ddd}
+.resstrike{border-left:4px solid #db2424}.supstrike{border-right:4px solid #148d35}
+.strikenum{font-size:17px;font-weight:900;margin-bottom:5px}
+.mini{display:grid;grid-template-columns:1fr 1fr;gap:3px}
+.mini div{border-radius:7px;padding:5px 2px}
+.mcall{background:#fff0f0}.mput{background:#eaf9ed}
+.small{font-size:9px}.smallval{font-size:10px;font-weight:900}
+.level{padding:11px 4px}
+.reslevel{background:#ffe3e3;border:2px solid #db2424}
+.suplevel{background:#e1f7e6;border:2px solid #148d35}
+.levelstrike{font-size:25px;font-weight:900}
+.error{display:none;background:#ffe1e1;color:#a00000;text-align:center;font-weight:800}
 </style>
-
 </head>
 
 <body>
 
 <div class="card">
-
-    <div class="top-line">
-
-        <div class="top-label">
-            NIFTY LIVE
-        </div>
-
-        <div
-            class="nifty-price"
-            id="nifty"
-        >
-            Loading...
-        </div>
-
+    <div class="top">
+        <span>NIFTY LIVE</span>
+        <span class="price" id="nifty">Loading...</span>
     </div>
 
-    <div class="top-info">
-
-        <div class="info-box">
-
-            <div class="small-label">
-                ATM
-            </div>
-
-            <div
-                class="info-value"
-                id="atm"
-            >
-                -
-            </div>
-
+    <div class="info">
+        <div>
+            <span class="label">ATM</span>
+            <div class="value" id="atm">-</div>
         </div>
 
-        <div class="info-box">
-
-            <div class="small-label">
-                Expiry
-            </div>
-
-            <div
-                class="info-value"
-                id="expiry"
-            >
-                -
-            </div>
-
+        <div>
+            <span class="label">Expiry</span>
+            <div class="value" id="expiry">-</div>
         </div>
 
-        <div class="info-box">
-
-            <div class="small-label">
-                Updated
-            </div>
-
-            <div
-                class="info-value"
-                id="updated"
-            >
-                -
-            </div>
-
+        <div>
+            <span class="label">Updated</span>
+            <div class="value" id="time">-</div>
         </div>
-
     </div>
-
 </div>
 
-<div
-    class="card error-box"
-    id="errorBox"
-></div>
+<div class="card error" id="error"></div>
 
-<div class="card atm-card">
+<div class="card atm">
+    <div class="title" id="atmTitle">ATM -</div>
 
-    <div
-        class="atm-title"
-        id="atmTitle"
-    >
-        ATM -
-    </div>
-
-    <div class="atm-data-grid">
-
-        <div class="data-side call-side">
-
-            <div class="side-title red">
-                ATM CALL
+    <div class="two">
+        <div class="side call">
+            <b class="red">ATM CALL</b>
+            <div class="line">
+                <span>OI</span>
+                <b id="atmCallOi">-</b>
             </div>
-
-            <div class="data-line">
-
-                <span class="data-name">
-                    Call OI
-                </span>
-
-                <span
-                    class="data-number red"
-                    id="atmCallOi"
-                >
-                    -
-                </span>
-
+            <div class="line">
+                <span>Change</span>
+                <b id="atmCallChange">-</b>
             </div>
-
-            <div class="data-line">
-
-                <span class="data-name">
-                    Call Change
-                </span>
-
-                <span
-                    class="data-number"
-                    id="atmCallChange"
-                >
-                    -
-                </span>
-
-            </div>
-
-            <div
-                class="total-line call-total"
-                id="atmCallTotal"
-            >
+            <div class="total calltotal" id="atmCallTotal">
                 Total -
             </div>
-
         </div>
 
-        <div class="data-side put-side">
-
-            <div class="side-title green">
-                ATM PUT
+        <div class="side put">
+            <b class="green">ATM PUT</b>
+            <div class="line">
+                <span>OI</span>
+                <b id="atmPutOi">-</b>
             </div>
-
-            <div class="data-line">
-
-                <span class="data-name">
-                    Put OI
-                </span>
-
-                <span
-                    class="data-number green"
-                    id="atmPutOi"
-                >
-                    -
-                </span>
-
+            <div class="line">
+                <span>Change</span>
+                <b id="atmPutChange">-</b>
             </div>
-
-            <div class="data-line">
-
-                <span class="data-name">
-                    Put Change
-                </span>
-
-                <span
-                    class="data-number"
-                    id="atmPutChange"
-                >
-                    -
-                </span>
-
-            </div>
-
-            <div
-                class="total-line put-total"
-                id="atmPutTotal"
-            >
+            <div class="total puttotal" id="atmPutTotal">
                 Total -
             </div>
-
         </div>
-
     </div>
-
 </div>
 
 <div class="card">
-
-    <div class="headings">
-
-        <div class="heading-box res-heading">
-            RESISTANCE SIDE
-        </div>
-
-        <div class="heading-box sup-heading">
-            SUPPORT SIDE
-        </div>
-
+    <div class="two">
+        <div class="head reshead">RESISTANCE SIDE</div>
+        <div class="head suphead">SUPPORT SIDE</div>
     </div>
 
-    <div id="pairedRows"></div>
-
+    <div id="pairs"></div>
 </div>
 
 <div class="card">
+    <div class="levels">
+        <div class="level reslevel">
+            <b class="red">RESISTANCE</b>
+            <div class="levelstrike red" id="resStrike">-</div>
+            <div id="resDetail">-</div>
+        </div>
 
-    <h2>
-        Strong Resistance / Support
-    </h2>
+        <div class="level suplevel">
+            <b class="green">SUPPORT</b>
+            <div class="levelstrike green" id="supStrike">-</div>
+            <div id="supDetail">-</div>
+        </div>
+    </div>
+</div>
 
-    <div class="level-grid">
+<script>
+function color(value){
+    value=Number(value||0);
+    if(value>0)return "green";
+    if(value<0)return "red";
+    return "";
+}
 
-        <div
-            class="
-                level-box
-                res-level
-            "
-        >
+function strikeBox(row,type){
+    if(!row)return "<div class='strike'>Data નથી</div>";
 
-            <div
-                class="
-                    level-title
-                    red
-                "
-            >
-                STRONG RESISTANCE
+    return `
+    <div class="strike ${type}">
+        <div class="strikenum">${row.strike}</div>
+
+        <div class="mini">
+            <div class="mcall">
+                <b class="red small">CALL</b>
+                <div class="small">OI</div>
+                <div class="smallval red">${row.call_oi}</div>
+                <div class="small">Change</div>
+                <div class="smallval ${color(row.call_change_raw)}">
+                    ${row.call_change}
+                </div>
+                <div class="total calltotal">
+                    ${row.call_total}
+                </div>
             </div>
 
-            <div
-                class="
-                    level-strike
-                    red
-                "
-                id="resStrike"
-            >
-                -
+            <div class="mput">
+                <b class="green small">PUT</b>
+                <div class="small">OI</div>
+                <div class="smallval green">${row.put_oi}</div>
+                <div class="small">Change</div>
+                <div class="smallval ${color(row.put_change_raw)}">
+                    ${row.put_change}
+                </div>
+                <div class="total puttotal">
+                    ${row.put_total}
+                </div>
             </div>
+        </div>
+    </div>`;
+}
 
-            <div
-                class="level-det
+async function load(){
+    const errorBox=document.getElementById("error");
+
+    try{
+        const response=await fetch(
+            "/api?t="+Date.now(),
+            {cache:"no-store"}
+        );
+
+        const data=await response.json();
+
+        if(!response.ok||data.error){
+            throw new Error(data.error||"Load failed");
+        }
+
+        errorBox.style.display="none";
+
+        nifty.innerText=data.nifty;
+        atm.innerText=data.atm;
+        expiry.innerText=data.expiry;
+        time.innerText=data.time;
+        atmTitle.innerText="ATM "+data.atm;
+
+        const a=data.atm_data;
+
+        atmCallOi.innerText=a.call_oi;
+        atmCallChange.innerText=a.call_change;
+        atmCallChange.className=color(a.call_change_raw);
+        atmCallTotal.innerText="Total "+a.call_total;
+
+        atmPutOi.innerText=a.put_oi;
+        atmPutChange.innerText=a.put_change;
+        atmPutChange.className=color(a.put_change_raw);
+        atmPutTotal.innerText="Total "+a.put_total;
+
+        pairs.innerHTML=data.pairs.map(pair=>`
+            <div class="pair">
+                ${strikeBox(pair.upper,"resstrike")}
+                ${strikeBox(pair.lower,"supstrike")}
+            </div>
+        `).join("");
+
+        resStrike.innerText=data.resistance.strike;
+        resDetail.innerHTML=
+            "Call OI "+data.resistance.oi+
+            "<br>Change "+data.resistance.change+
+            "<br><b class='red'>Total "+data.resistance.total+"</b>";
+
+        supStrike.innerText=data.support.strike;
+        supDetail.innerHTML=
+            "Put OI "+data.support.oi+
+            "<br>Change "+data.support.change+
+            "<br><b class='green'>Total "+data.support.total+"</b>";
+
+    }catch(error){
+        errorBox.style.display="block";
+        errorBox.innerText=error.message;
+    }
+}
+
+load();
+setInterval(load,3000);
+</script>
+
+</body>
+</html>
+"""
+
+
+@app.route("/")
+def home():
+    return render_template_string(HTML)
+
+
+@app.route("/health")
+def health():
+    return jsonify({
+        "status": "ok",
+        "token_configured": bool(TOKEN),
+    })
+
+
+if __name__ == "__main__":
+    app.run(
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 5000)),
+        debug=False,
+        )
