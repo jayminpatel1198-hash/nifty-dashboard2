@@ -8,7 +8,7 @@ app = Flask(__name__)
 
 TOKEN = os.environ.get("UPSTOX_TOKEN", "").strip()
 
-INDEX = "NSE_INDEX|Nifty 50"
+INDEX_KEY = "NSE_INDEX|Nifty 50"
 CHAIN_URL = "https://api.upstox.com/v2/option/chain"
 CONTRACT_URL = "https://api.upstox.com/v2/option/contract"
 QUOTE_URL = "https://api.upstox.com/v2/market-quote/quotes"
@@ -30,7 +30,7 @@ def num(value):
         return 0.0
 
 
-def fmt(value):
+def short(value):
     value = num(value)
 
     if abs(value) < 0.5:
@@ -126,7 +126,7 @@ def oi_change(market):
 
     previous = num(
         market.get("prev_oi")
-                or market.get("previous_oi")
+        or market.get("previous_oi")
         or market.get("close_oi")
         or 0
     )
@@ -149,8 +149,8 @@ def oi_change(market):
     return 0.0
 
 
-def active_expiry():
-        now = time.time()
+def get_active_expiry():
+    now = time.time()
 
     if (
         EXPIRY_CACHE["value"]
@@ -161,17 +161,17 @@ def active_expiry():
     payload = get_json(
         CONTRACT_URL,
         {
-            "instrument_key": INDEX
+            "instrument_key": INDEX_KEY
         }
     )
 
-    today = date.today().isoformat()
+    today_text = date.today().isoformat()
 
     expiries = sorted({
         str(item.get("expiry"))
         for item in payload.get("data", [])
         if item.get("expiry")
-        and str(item.get("expiry")) >= today
+        and str(item.get("expiry")) >= today_text
     })
 
     if not expiries:
@@ -190,7 +190,7 @@ def fetch_chain():
 
     try:
         attempts.append(
-            active_expiry()
+            get_active_expiry()
         )
     except Exception:
         pass
@@ -214,7 +214,7 @@ def fetch_chain():
             payload = get_json(
                 CHAIN_URL,
                 {
-                    "instrument_key": INDEX,
+                    "instrument_key": INDEX_KEY,
                     "expiry_date": expiry
                 }
             )
@@ -237,7 +237,7 @@ def fetch_chain():
 
     raise RuntimeError(
         last_error
-        or "Active option-chain data મળ્યો નથી."
+        or "Active Option Chain data મળ્યો નથી."
     )
 
 
@@ -261,19 +261,17 @@ def fetch_quotes(instrument_keys):
         {}
     ).items():
 
-        token = (
+        instrument_token = (
             quote.get("instrument_token")
             or response_key.replace(":", "|", 1)
         )
 
-        quote_map[token] = quote
+        quote_map[instrument_token] = quote
 
     return quote_map
 
 
-# PART 3 PASTE BELOW THIS LINE
 def option_side(option, quote_map):
-
     market = option.get(
         "market_data",
         {}
@@ -318,7 +316,6 @@ def option_side(option, quote_map):
     )
 
     if ltp > 0 and vwap > 0:
-
         if ltp > vwap:
             status = "VWAP ઉપર"
             status_class = "green"
@@ -332,19 +329,17 @@ def option_side(option, quote_map):
             status_class = "amber"
 
     else:
-
         status = "VWAP નથી"
         status_class = "amber"
 
     return {
-
         "oi_raw": oi,
         "change_raw": change,
         "total_raw": total,
 
-        "oi": fmt(oi),
-        "change": fmt(change),
-        "total": fmt(total),
+        "oi": short(oi),
+        "change": short(change),
+        "total": short(total),
 
         "ltp": money(ltp),
         "vwap": money(vwap),
@@ -357,50 +352,33 @@ def option_side(option, quote_map):
 
         "status": status,
         "status_class": status_class
-
     }
 
 
-def make_row(
-    item,
-    atm,
-    quote_map
-):
-
+def make_row(item, atm, quote_map):
     strike = int(
         num(
-            item.get(
-                "strike_price"
-            )
+            item.get("strike_price")
         )
     )
 
     return {
-
         "strike": strike,
-
         "atm": strike == atm,
 
         "call": option_side(
-            item.get(
-                "call_options",
-                {}
-            ),
+            item.get("call_options", {}),
             quote_map
         ),
 
         "put": option_side(
-            item.get(
-                "put_options",
-                {}
-            ),
+            item.get("put_options", {}),
             quote_map
         )
-
     }
 
 
-# PART 4 PASTE BELOW THIS LINE
+# PART 2 BELOW
 @app.route("/api")
 def api():
 
@@ -436,23 +414,19 @@ def api():
             ) * STEP
         )
 
-        wanted = {
-            atm
-        }
+        wanted = {atm}
 
-        for count in range(
+        for i in range(
             1,
             SIDE + 1
         ):
 
             wanted.add(
-                atm
-                + count * STEP
+                atm + i * STEP
             )
 
             wanted.add(
-                atm
-                - count * STEP
+                atm - i * STEP
             )
 
         selected = []
@@ -526,88 +500,73 @@ def api():
                 row["strike"]
             ] = row
 
-        if atm not in strike_map:
-
-            raise RuntimeError(
-                "ATM strike data મળ્યો નથી."
-            )
-
         upper = []
         lower = []
 
-        for count in range(
+        for i in range(
             1,
             SIDE + 1
         ):
 
-            upper_strike = (
-                atm
-                + count * STEP
-            )
-
-            lower_strike = (
-                atm
-                - count * STEP
-            )
-
-            if upper_strike in strike_map:
+            if (
+                atm + i * STEP
+            ) in strike_map:
 
                 upper.append(
                     strike_map[
-                        upper_strike
+                        atm + i * STEP
                     ]
                 )
 
-            if lower_strike in strike_map:
+            if (
+                atm - i * STEP
+            ) in strike_map:
 
                 lower.append(
                     strike_map[
-                        lower_strike
+                        atm - i * STEP
                     ]
                 )
 
-        if not upper or not lower:
-
-            raise RuntimeError(
-                "ATM આસપાસના strikes મળ્યા નથી."
-            )
-
         resistance = max(
             upper,
-            key=lambda row:
-            row["call"]["total_raw"]
+            key=lambda x:
+            x["call"]["total_raw"]
         )
 
         support = max(
             lower,
-            key=lambda row:
-            row["put"]["total_raw"]
+            key=lambda x:
+            x["put"]["total_raw"]
         )
 
         pairs = []
 
-        for index in range(
+        for i in range(
             SIDE
         ):
 
             pairs.append({
 
-                "upper": (
-                    upper[index]
-                    if index < len(upper)
-                    else None
-                ),
+                "upper":
+                upper[i],
 
-                "lower": (
-                    lower[index]
-                    if index < len(lower)
-                    else None
-                )
+                "lower":
+                lower[i]
 
             })
 
+# PART 2B BELOW
+        if atm not in strike_map:
+            raise RuntimeError(
+                "ATM strike data મળ્યો નથી."
+            )
 
-# PART 5 PASTE BELOW THIS LINE
+        if not upper or not lower:
+            raise RuntimeError(
+                "ATM આસપાસના strikes મળ્યા નથી."
+            )
+
         return jsonify({
 
             "nifty": round(
@@ -635,24 +594,6 @@ def api():
                     "strike"
                 ],
 
-                "oi_raw": resistance[
-                    "call"
-                ][
-                    "oi_raw"
-                ],
-
-                "change_raw": resistance[
-                    "call"
-                ][
-                    "change_raw"
-                ],
-
-                "total_raw": resistance[
-                    "call"
-                ][
-                    "total_raw"
-                ],
-
                 "oi": resistance[
                     "call"
                 ][
@@ -677,16 +618,16 @@ def api():
                     "ltp"
                 ],
 
-                "vwap": resistance[
-                    "call"
-                ][
-                    "vwap"
-                ],
-
                 "iv": resistance[
                     "call"
                 ][
                     "iv"
+                ],
+
+                "vwap": resistance[
+                    "call"
+                ][
+                    "vwap"
                 ],
 
                 "status": resistance[
@@ -707,24 +648,6 @@ def api():
 
                 "strike": support[
                     "strike"
-                ],
-
-                "oi_raw": support[
-                    "put"
-                ][
-                    "oi_raw"
-                ],
-
-                "change_raw": support[
-                    "put"
-                ][
-                    "change_raw"
-                ],
-
-                "total_raw": support[
-                    "put"
-                ][
-                    "total_raw"
                 ],
 
                 "oi": support[
@@ -751,16 +674,16 @@ def api():
                     "ltp"
                 ],
 
-                "vwap": support[
-                    "put"
-                ][
-                    "vwap"
-                ],
-
                 "iv": support[
                     "put"
                 ][
                     "iv"
+                ],
+
+                "vwap": support[
+                    "put"
+                ][
+                    "vwap"
                 ],
 
                 "status": support[
@@ -790,9 +713,9 @@ def api():
         }), 500
 
 
+# PART 3 BELOW
 HTML = r"""
 <!doctype html>
-
 <html lang="gu">
 
 <head>
@@ -801,14 +724,11 @@ HTML = r"""
 
 <meta
     name="viewport"
-    content="
-        width=device-width,
-        initial-scale=1
-    "
+    content="width=device-width,initial-scale=1"
 >
 
 <title>
-    NIFTY OI Live
+    NIFTY OI LIVE
 </title>
 
 <style>
@@ -844,19 +764,10 @@ body{
     font-weight:900;
 }
 
-.info,
-.two,
-.pair,
-.levels,
-.mini{
-    display:grid;
-    grid-template-columns:1fr 1fr;
-    gap:5px;
-}
-
 .info{
-    grid-template-columns:
-        repeat(3,1fr);
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:5px;
     margin-top:8px;
 }
 
@@ -901,21 +812,23 @@ body{
     margin-bottom:6px;
 }
 
-.side,
-.strike,
-.level{
+.two{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:5px;
+}
+
+.side{
     border-radius:10px;
     padding:6px 3px;
     text-align:center;
 }
 
-.call,
-.mcall{
+.call{
     background:#fff0f0;
 }
 
-.put,
-.mput{
+.put{
     background:#eaf9ed;
 }
 
@@ -966,22 +879,26 @@ body{
 }
 
 .pair{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:5px;
     margin:5px 0;
 }
 
 .strike{
     background:#f8f9fa;
     border:1px solid #dddddd;
+    border-radius:10px;
+    padding:6px 3px;
+    text-align:center;
 }
 
 .resstrike{
-    border-left:
-        4px solid #db2424;
+    border-left:4px solid #db2424;
 }
 
 .supstrike{
-    border-right:
-        4px solid #148d35;
+    border-right:4px solid #148d35;
 }
 
 .strikenum{
@@ -991,12 +908,22 @@ body{
 }
 
 .mini{
+    display:grid;
+    grid-template-columns:1fr 1fr;
     gap:2px;
 }
 
 .mini > div{
     border-radius:6px;
     padding:4px 1px;
+}
+
+.mcall{
+    background:#fff0f0;
+}
+
+.mput{
+    background:#eaf9ed;
 }
 
 .small{
@@ -1008,20 +935,26 @@ body{
     font-weight:900;
 }
 
+.levels{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:5px;
+}
+
 .level{
+    border-radius:10px;
     padding:10px 3px;
+    text-align:center;
 }
 
 .reslevel{
     background:#ffe3e3;
-    border:
-        2px solid #db2424;
+    border:2px solid #db2424;
 }
 
 .suplevel{
     background:#e1f7e6;
-    border:
-        2px solid #148d35;
+    border:2px solid #148d35;
 }
 
 .levelstrike{
@@ -1042,50 +975,112 @@ body{
     font-weight:800;
 }
 
+.footer{
+    text-align:center;
+    padding:8px;
+    color:#777777;
+    font-size:10px;
+}
+
 </style>
 
 </head>
 
-
-# PART 6 PASTE BELOW THIS LINE
 <body>
 
 <div class="card">
+
     <div class="top">
-        <span>NIFTY LIVE</span>
-        <span class="price" id="nifty">Loading...</span>
+
+        <span>
+            NIFTY LIVE
+        </span>
+
+        <span
+            class="price"
+            id="nifty"
+        >
+            Loading...
+        </span>
+
     </div>
 
     <div class="info">
+
         <div class="ibox">
-            <div class="label">ATM</div>
-            <div class="value" id="atm">-</div>
+
+            <div class="label">
+                ATM
+            </div>
+
+            <div
+                class="value"
+                id="atm"
+            >
+                -
+            </div>
+
         </div>
 
         <div class="ibox">
-            <div class="label">Expiry</div>
-            <div class="value" id="expiry">-</div>
+
+            <div class="label">
+                Expiry
+            </div>
+
+            <div
+                class="value"
+                id="expiry"
+            >
+                -
+            </div>
+
         </div>
 
         <div class="ibox">
-            <div class="label">Updated</div>
-            <div class="value" id="updated">-</div>
+
+            <div class="label">
+                Updated
+            </div>
+
+            <div
+                class="value"
+                id="updated"
+            >
+                -
+            </div>
+
         </div>
+
     </div>
+
 </div>
 
-<div class="card error" id="errorBox"></div>
+<div
+    class="card error"
+    id="errorBox"
+></div>
 
 <div class="card atm">
-    <div class="title" id="atmTitle">
+
+    <div
+        class="title"
+        id="atmTitle"
+    >
         ATM -
     </div>
 
-    <div class="two" id="atmSides"></div>
+    <div
+        class="two"
+        id="atmSides"
+    ></div>
+
 </div>
 
 <div class="card">
+
     <div class="two">
+
         <div class="head reshead">
             RESISTANCE SIDE
         </div>
@@ -1093,15 +1088,19 @@ body{
         <div class="head suphead">
             SUPPORT SIDE
         </div>
+
     </div>
 
     <div id="pairs"></div>
+
 </div>
 
 <div class="card">
+
     <div class="levels">
 
         <div class="level reslevel">
+
             <b class="red">
                 STRONG RESISTANCE
             </b>
@@ -1119,9 +1118,11 @@ body{
             >
                 -
             </div>
+
         </div>
 
         <div class="level suplevel">
+
             <b class="green">
                 STRONG SUPPORT
             </b>
@@ -1139,268 +1140,206 @@ body{
             >
                 -
             </div>
+
         </div>
 
     </div>
+
 </div>
 
+<div class="footer">
+    Auto refresh every 3 seconds
+</div>
+
+
+<!-- PART 3B BELOW -->
 <script>
 
-const getElement = id =>
-    document.getElementById(id);
+const $ = id => document.getElementById(id);
 
+function color(v){
 
-function changeColor(value) {
+    v = Number(v || 0);
 
-    value = Number(
-        value || 0
-    );
+    if(v > 0) return "green";
 
-    if (value > 0) {
-        return "green";
-    }
-
-    if (value < 0) {
-        return "red";
-    }
+    if(v < 0) return "red";
 
     return "";
 }
 
 
-function optionBox(
-    data,
-    optionType,
-    mini = false
-) {
+function optionBox(d,type,mini=false){
 
-    const isCall =
-        optionType === "CALL";
+    const isCall = type==="CALL";
 
-    const backgroundClass =
-        isCall
-        ? "mcall"
-        : "mput";
-
-    const sideClass =
-        isCall
-        ? "call"
-        : "put";
-
-    const colourClass =
-        isCall
-        ? "red"
-        : "green";
-
-    const wrapperClass =
+    const wrapper =
         mini
-        ? backgroundClass
-        : "side " + sideClass;
+        ? (isCall ? "mcall":"mput")
+        : ("side "+(isCall ? "call":"put"));
+
+    const txt =
+        isCall ? "red":"green";
 
     return `
-        <div class="${wrapperClass}">
+    <div class="${wrapper}">
 
-            <b class="${colourClass}">
-                ${optionType}
+        <b class="${txt}">
+            ${type}
+        </b>
+
+        <div class="line">
+            <span>OI</span>
+            <b class="${txt}">
+                ${d.oi}
             </b>
+        </div>
 
-            <div class="line">
-                <span>OI</span>
+        <div class="line">
+            <span>Change</span>
+            <b class="${color(d.change_raw)}">
+                ${d.change}
+            </b>
+        </div>
 
-                <b class="${colourClass}">
-                    ${data.oi}
-                </b>
-            </div>
+        <div class="line">
+            <span>Price</span>
+            <b>${d.ltp}</b>
+        </div>
 
-            <div class="line">
-                <span>OI Change</span>
+        <div class="line">
+            <span>IV</span>
+            <b>${d.iv}</b>
+        </div>
 
-                <b class="${
-                    changeColor(
-                        data.change_raw
-                    )
-                }">
-                    ${data.change}
-                </b>
-            </div>
+        <div class="line">
+            <span>VWAP</span>
+            <b>${d.vwap}</b>
+        </div>
 
-            <div class="line">
-                <span>Live Price</span>
+        <div class="line">
+            <span>Status</span>
 
-                <b>
-                    ${data.ltp}
-                </b>
-            </div>
+            <b class="${d.status_class}">
+                ${d.status}
+            </b>
+        </div>
 
-            <div class="line">
-                <span>IV</span>
+        <div class="total ${isCall ? "calltotal":"puttotal"}">
 
-                <b>
-                    ${data.iv}
-                </b>
-            </div>
-
-            <div class="line">
-                <span>VWAP</span>
-
-                <b>
-                    ${data.vwap}
-                </b>
-            </div>
-
-            <div class="line">
-                <span>Status</span>
-
-                <b class="${
-                    data.status_class
-                }">
-                    ${data.status}
-                </b>
-            </div>
-
-            <div class="
-                total
-                ${
-                    isCall
-                    ? "calltotal"
-                    : "puttotal"
-                }
-            ">
-                Total ${data.total}
-            </div>
+            Total ${d.total}
 
         </div>
+
+    </div>
     `;
 }
 
 
-function strikeBox(
-    row,
-    sideClass
-) {
+function strikeBox(row,side){
 
-    if (!row) {
+    if(!row){
+
         return `
-            <div class="strike">
-                Data નથી
-            </div>
+        <div class="strike">
+            Data નથી
+        </div>
         `;
+
     }
 
     return `
-        <div class="
-            strike
-            ${sideClass}
-        ">
 
-            <div class="strikenum">
-                ${row.strike}
-            </div>
+    <div class="strike ${side}">
 
-            <div class="mini">
+        <div class="strikenum">
 
-                ${
-                    optionBox(
-                        row.call,
-                        "CALL",
-                        true
-                    )
-                }
-
-                ${
-                    optionBox(
-                        row.put,
-                        "PUT",
-                        true
-                    )
-                }
-
-            </div>
+            ${row.strike}
 
         </div>
+
+        <div class="mini">
+
+            ${optionBox(
+                row.call,
+                "CALL",
+                true
+            )}
+
+            ${optionBox(
+                row.put,
+                "PUT",
+                true
+            )}
+
+        </div>
+
+    </div>
+
     `;
+
 }
 
 
-async function loadDashboard() {
+async function loadDashboard(){
 
     const errorBox =
-        getElement(
-            "errorBox"
-        );
+        $("errorBox");
 
-    try {
+    try{
 
         const response =
             await fetch(
-                "/api?t="
-                + Date.now(),
+                "/api?t="+Date.now(),
                 {
-                    cache: "no-store"
+                    cache:"no-store"
                 }
             );
 
         const data =
             await response.json();
 
-        if (
-            !response.ok
-            || data.error
-        ) {
+        if(
+            !response.ok ||
+            data.error
+        ){
+
             throw new Error(
-                data.error
-                || "Data load failed"
+                data.error ||
+                "Load Failed"
             );
+
         }
 
         errorBox.style.display =
             "none";
 
-        getElement(
-            "nifty"
-        ).innerText =
+        $("nifty").innerText =
             data.nifty;
 
-        getElement(
-            "atm"
-        ).innerText =
+        $("atm").innerText =
             data.atm;
 
-        getElement(
-            "expiry"
-        ).innerText =
+        $("expiry").innerText =
             data.expiry;
 
-        getElement(
-            "updated"
-        ).innerText =
+        $("updated").innerText =
             data.time;
 
-        getElement(
-            "atmTitle"
-        ).innerText =
+        $("atmTitle").innerText =
             "ATM " + data.atm;
-
-        getElement(
-            "atmSides"
-        ).innerHTML =
-
+                    $("atmSides").innerHTML =
             optionBox(
                 data.atm_data.call,
                 "CALL"
             )
-
             +
-
             optionBox(
                 data.atm_data.put,
                 "PUT"
             );
 
-        getElement(
-            "pairs"
-        ).innerHTML =
-
+        $("pairs").innerHTML =
             data.pairs.map(
                 pair => `
                     <div class="pair">
@@ -1429,22 +1368,17 @@ async function loadDashboard() {
         const support =
             data.support;
 
-        getElement(
-            "resStrike"
-        ).innerText =
+        $("resStrike").innerText =
             resistance.strike;
 
-        getElement(
-            "resDetail"
-        ).innerHTML =
-
+        $("resDetail").innerHTML =
             "Call OI "
             + resistance.oi
 
-            + "<br>OI Change "
+            + "<br>Change "
             + resistance.change
 
-            + "<br>Live Price "
+            + "<br>Price "
             + resistance.ltp
 
             + "<br>IV "
@@ -1464,22 +1398,17 @@ async function loadDashboard() {
             + resistance.total
             + "</b>";
 
-        getElement(
-            "supStrike"
-        ).innerText =
+        $("supStrike").innerText =
             support.strike;
 
-        getElement(
-            "supDetail"
-        ).innerHTML =
-
+        $("supDetail").innerHTML =
             "Put OI "
             + support.oi
 
-            + "<br>OI Change "
+            + "<br>Change "
             + support.change
 
-            + "<br>Live Price "
+            + "<br>Price "
             + support.ltp
 
             + "<br>IV "
@@ -1499,7 +1428,8 @@ async function loadDashboard() {
             + support.total
             + "</b>";
 
-    } catch (error) {
+    }
+    catch(error){
 
         errorBox.style.display =
             "block";
@@ -1562,6 +1492,4 @@ if __name__ == "__main__":
 
         debug=False
 
-    )
-
-    
+)
