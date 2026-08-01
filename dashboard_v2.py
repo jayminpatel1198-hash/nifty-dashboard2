@@ -248,7 +248,7 @@ def get_spot():
         {}
 
     )
-
+print(data)
     info = quotes.get(
 
         INDEX_KEY,
@@ -256,6 +256,7 @@ def get_spot():
         {}
 
     )
+print(info)
 
     ltp = num(info.get("last_price"))
     
