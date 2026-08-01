@@ -66,13 +66,21 @@ def get_spot():
         }
     )
 
-    expiries = data.get("data", [])
+    print(data)
 
-    if not expiries:
+    contracts = data.get("data", [])
+
+    if not contracts:
         return None
 
-    return expiries[0]["expiry"]
+    for c in contracts:
+        if "expiry" in c:
+            return c["expiry"]
 
+        if "expiry_date" in c:
+            return c["expiry_date"]
+
+    return None
 
 def atm_strike(spot):
     return int(round(spot / STEP) * STEP)
