@@ -132,7 +132,7 @@ def get_json(url,params):
         )
 
     return data
-  def get_expiry():
+def get_expiry():
 
     now = time.time()
 
@@ -495,7 +495,7 @@ def filter_chain(chain, strikes):
     )
 
     return rows
-  def calculate_flow(rows):
+def calculate_flow(rows):
 
     call_oi = 0
 
