@@ -230,48 +230,39 @@ def get_expiry():
 def get_spot():
 
     data = get_json(
-
         QUOTE_URL,
-
         {
-
             "instrument_key": INDEX_KEY
-
         }
-
     )
+
+    print(data)
 
     quotes = data.get(
-
         "data",
-
         {}
-
     )
-print(data)
+
     info = quotes.get(
-
         INDEX_KEY,
-
         {}
-
     )
-print(info)
+
+    print(info)
 
     ltp = num(info.get("last_price"))
-    
+
     if ltp <= 0:
         ltp = num(info.get("ltp"))
-    
+
     if ltp <= 0:
         ohlc = info.get("ohlc", {})
         ltp = num(ohlc.get("close"))
-    
+
     if ltp <= 0:
         return 0
-    
-    return ltp
 
+    return ltp
 
 def atm_strike(spot):
 
