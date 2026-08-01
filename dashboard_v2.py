@@ -159,14 +159,10 @@ def get_expiry():
         }
 
     )
+    print("INDEX_KEY =", INDEX_KEY)
+    print("CONTRACT RESPONSE =", data)
 
-    contracts = data.get(
-
-        "data",
-
-        []
-
-    )
+    contracts = data.get("data", [])
 
     expiries = []
 
