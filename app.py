@@ -86,3 +86,25 @@ def get_option_chain(expiry):
             "expiry_date": expiry
         }
     )
+    @app.route("/api")
+def api():
+
+    spot = get_spot()
+
+    expiry = get_expiry()
+
+    if not expiry:
+        return jsonify({
+            "error": "No expiry found"
+        })
+
+    atm = atm_strike(spot)
+
+    chain = get_option_chain(expiry)
+
+    return jsonify({
+        "spot": spot,
+        "atm": atm,
+        "expiry": expiry,
+        "chain": chain
+    })
