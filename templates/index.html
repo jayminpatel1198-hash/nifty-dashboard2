@@ -1,1 +1,81 @@
-hello
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NIFTY LIVE OI</title>
+
+<style>
+
+body{
+background:#111;
+color:white;
+font-family:Arial;
+margin:0;
+padding:20px;
+}
+
+h1{
+text-align:center;
+}
+
+.card{
+background:#222;
+padding:15px;
+margin:10px 0;
+border-radius:10px;
+}
+
+.value{
+font-size:32px;
+font-weight:bold;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<h1>NIFTY LIVE OI</h1>
+
+<div class="card">
+Spot :
+<div id="spot" class="value">Loading...</div>
+</div>
+
+<div class="card">
+ATM :
+<div id="atm" class="value">Loading...</div>
+</div>
+
+<div class="card">
+Expiry :
+<div id="expiry" class="value">Loading...</div>
+</div>
+
+<script>
+
+async function load(){
+
+let r=await fetch("/api");
+
+let d=await r.json();
+
+document.getElementById("spot").innerHTML=d.spot;
+
+document.getElementById("atm").innerHTML=d.atm;
+
+document.getElementById("expiry").innerHTML=d.expiry;
+
+}
+
+load();
+
+setInterval(load,5000);
+
+</script>
+
+</body>
+
+</html>
