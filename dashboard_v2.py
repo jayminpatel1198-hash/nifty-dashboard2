@@ -257,25 +257,19 @@ def get_spot():
 
     )
 
-    ltp = num(
+ltp = num(info.get("last_price"))
 
-        info.get(
+if ltp <= 0:
+    ltp = num(info.get("ltp"))
 
-            "last_price"
+if ltp <= 0:
+    ohlc = info.get("ohlc", {})
+    ltp = num(ohlc.get("close"))
 
-        )
+if ltp <= 0:
+    return 0
 
-    )
-
-    if ltp <= 0:
-
-        raise Exception(
-
-            "Spot not available"
-
-        )
-
-    return ltp
+return ltp
 
 
 def atm_strike(spot):
