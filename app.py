@@ -59,12 +59,18 @@ def get_spot():
 
     return ltp
     def get_expiry():
-    data = get_json(
+            import json
+
+    response = get_json(
         CONTRACT_URL,
         {
             "instrument_key": INDEX_KEY
         }
     )
+
+    print(json.dumps(response, indent=2))
+
+    data = response
 
     print(data)
 
