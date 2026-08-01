@@ -236,7 +236,7 @@ def get_spot():
         }
     )
 
-    print(data)
+    app.logger.info(data)
 
     quotes = data.get(
         "data",
