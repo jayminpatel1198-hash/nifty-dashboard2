@@ -58,3 +58,31 @@ def get_spot():
         ltp = num(ohlc.get("close"))
 
     return ltp
+    def get_expiry():
+    data = get_json(
+        CONTRACT_URL,
+        {
+            "instrument_key": INDEX_KEY
+        }
+    )
+
+    expiries = data.get("data", [])
+
+    if not expiries:
+        return None
+
+    return expiries[0]["expiry"]
+
+
+def atm_strike(spot):
+    return int(round(spot / STEP) * STEP)
+
+
+def get_option_chain(expiry):
+    return get_json(
+        OPTION_CHAIN_URL,
+        {
+            "instrument_key": INDEX_KEY,
+            "expiry_date": expiry
+        }
+    )
