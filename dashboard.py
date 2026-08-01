@@ -987,7 +987,62 @@ body{
 </head>
 
 <body>
+<div class="card" id="flowCard">
 
+    <div style="
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+        font-size:18px;
+        font-weight:bold;
+        margin-bottom:8px;
+    ">
+
+        <span id="putFlowText" class="green">
+            🟢 PUT : 0
+        </span>
+
+        <span id="callFlowText" class="red">
+            🔴 CALL : 0
+        </span>
+
+    </div>
+
+    <div style="
+        position:relative;
+        height:10px;
+        background:#dddddd;
+        border-radius:20px;
+        overflow:hidden;
+    ">
+
+        <div id="putFlow"
+        style="
+            position:absolute;
+            left:0;
+            top:0;
+            height:100%;
+            width:0%;
+            background:#16a34a;
+            transition:1s;
+        ">
+        </div>
+
+        <div id="callFlow"
+        style="
+            position:absolute;
+            right:0;
+            top:0;
+            height:100%;
+            width:0%;
+            background:#dc2626;
+            transition:1s;
+        ">
+        </div>
+
+    </div>
+
+</div>
 <div class="card">
 
     <div class="top">
