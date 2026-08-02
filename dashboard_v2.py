@@ -562,7 +562,8 @@ def calculate_flow(rows):
 
         ),
 
-        "overall_flow": overall
+        "overall_flow": overall,
+        "pcr": round(put_oi / call_oi, 2) if call_oi else 0
 
     }
 
@@ -827,6 +828,13 @@ Expiry :
 <span id="expiry">-</span>
 
 </div>
+<div>
+
+PCR :
+
+<span id="pcr">0</span>
+
+</div>
 
 </div>
 
@@ -906,6 +914,7 @@ document.getElementById("spot").innerHTML=d.spot;
 document.getElementById("atm").innerHTML=d.atm;
 
 document.getElementById("expiry").innerHTML=d.expiry;
+document.getElementById("pcr").innerHTML=d.flow.pcr;
 
 document.getElementById("flow").innerHTML=d.flow.overall_flow;
 
