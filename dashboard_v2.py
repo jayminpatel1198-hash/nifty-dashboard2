@@ -926,7 +926,12 @@ html+=`
 
 <tr>
 
-<td class="call">${Math.round(row.call_oi)}</td>
+<td class="call">
+<div style="display:flex;align-items:center;gap:5px;">
+<div style="height:10px;background:red;width:${Math.min(row.call_oi/150000,200)}px;border-radius:5px;"></div>
+<span>${Math.round(row.call_oi)}</span>
+</div>
+</td>
 
 <td class="call">${Math.round(row.call_change)}</td>
 
@@ -938,7 +943,12 @@ html+=`
 
 <td class="put">${Math.round(row.put_change)}</td>
 
-<td class="put">${Math.round(row.put_oi)}</td>
+<td class="put">
+<div style="display:flex;align-items:center;gap:5px;">
+<div style="height:10px;background:limegreen;width:${Math.min(row.put_oi/150000,200)}px;border-radius:5px;"></div>
+<span>${Math.round(row.put_oi)}</span>
+</div>
+</td>
 
 </tr>
 
