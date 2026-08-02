@@ -474,7 +474,11 @@ def calculate_flow(rows):
         ),
 
         "overall_flow": overall,
-        "pcr": round(put_oi / call_oi, 2) if call_oi else 0
+        "pcr": round(put_oi / call_oi, 2) if call_oi else 0,
+        "max_call": max_call,
+        "max_put": max_put,
+        "trend_score": round((put_percent - call_percent), 1),
+        "option_score": round((put_percent / 10), 1),
 
     }
 
