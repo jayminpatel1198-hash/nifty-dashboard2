@@ -587,7 +587,52 @@ body{
     padding:0;
     font-size:18px;
 }
+.card{
+    background:#2b2b2b;
+    border-radius:12px;
+    padding:12px;
+    text-align:center;
+    box-shadow:0 2px 8px rgba(0,0,0,.4);
+}
 
+@media (max-width:768px){
+
+body{
+    margin:8px;
+}
+
+h1{
+    font-size:28px;
+}
+
+.top{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+}
+
+.card{
+    padding:14px;
+}
+
+.bar{
+    height:28px;
+}
+
+table{
+    font-size:16px;
+    min-width:1200px;
+}
+
+th,td{
+    padding:12px;
+}
+
+.table-wrap{
+    overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
+}
+}
 h1{
     text-align:center;
     font-size:42px;
@@ -829,6 +874,7 @@ Loading...
 
 </div>
 
+<div class="table-wrap">
 <table>
 
 <thead>
@@ -853,7 +899,7 @@ Loading...
 </tbody>
 
 </table>
-
+</div>
 <script>
 
 async function load(){
