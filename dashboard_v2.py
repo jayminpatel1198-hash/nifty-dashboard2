@@ -459,18 +459,18 @@ def filter_chain(chain, strikes):
 
         )
 
-    rows.sort(
-    key=lambda x: x["strike"]
-)
+        rows.sort(
+            key=lambda x: x["strike"]
+        )
 
-max_call = max(rows, key=lambda x: x["call_oi"])["strike"]
-max_put = max(rows, key=lambda x: x["put_oi"])["strike"]
+        max_call = max(rows, key=lambda x: x["call_oi"])["strike"]
+        max_put = max(rows, key=lambda x: x["put_oi"])["strike"]
 
-for r in rows:
-    r["resistance"] = (r["strike"] == max_call)
-    r["support"] = (r["strike"] == max_put)
+        for r in rows:
+            r["resistance"] = (r["strike"] == max_call)
+            r["support"] = (r["strike"] == max_put)
 
-return rows
+        return rows
 
 
 def calculate_flow(rows):
