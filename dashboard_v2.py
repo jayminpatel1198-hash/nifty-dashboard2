@@ -460,10 +460,17 @@ def filter_chain(chain, strikes):
         )
 
     rows.sort(
+    key=lambda x: x["strike"]
+)
 
-        key=lambda x: x["strike"]
+max_call = max(rows, key=lambda x: x["call_oi"])["strike"]
+max_put = max(rows, key=lambda x: x["put_oi"])["strike"]
 
-    )
+for r in rows:
+    r["resistance"] = (r["strike"] == max_call)
+    r["support"] = (r["strike"] == max_put)
+
+return rows
 
     return rows
 def calculate_flow(rows):
@@ -947,7 +954,15 @@ color:${row.strike==d.atm ? 'yellow' : 'white'};
 font-weight:bold;
 font-size:18px;
 ">
-${row.strike}
+${
+row.resistance
+? "🔴 "+row.strike
+: row.support
+? "🟢 "+row.strike
+: row.strike==d.atm
+? "🟡 "+row.strike
+: row.strike
+}
 </td>
 
 
