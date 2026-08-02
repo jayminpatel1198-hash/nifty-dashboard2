@@ -597,20 +597,43 @@ text-align:center;
 
 }
 
-.top{
+.top-card{
+    background:#1b1b1b;
+    border-radius:15px;
+    padding:15px;
+    margin-bottom:20px;
+    box-shadow:0 0 10px rgba(255,255,255,.08);
+}
 
-display:flex;
+.summary{
+    display:grid;
+    grid-template-columns:repeat(2,1fr);
+    gap:12px;
+    margin-top:15px;
+}
 
-justify-content:center;
+.box{
+    background:#2b2b2b;
+    border-radius:12px;
+    padding:12px;
+    text-align:center;
+}
 
-gap:40px;
+.title{
+    color:#aaa;
+    font-size:14px;
+    margin-bottom:6px;
+}
 
-margin:20px 0;
+.box div:last-child{
+    font-size:22px;
+    font-weight:bold;
+}
 
-font-size:22px;
-
-font-weight:bold;
-
+@media(min-width:768px){
+    .summary{
+        grid-template-columns:repeat(4,1fr);
+    }
 }
 
 table{
@@ -715,35 +738,31 @@ font-weight:bold;
 
 <body>
 
-<h1>NIFTY LIVE OPTION DASHBOARD</h1>
+<div class="top-card">
 
-<div class="top">
+<h1>📈 NIFTY LIVE OPTION DASHBOARD</h1>
 
-<div>
+<div class="summary">
 
-Spot :
-<span id="spot">0</span>
-
+<div class="box">
+<div class="title">Spot</div>
+<div id="spot">0</div>
 </div>
 
-<div>
-
-ATM :
-<span id="atm">0</span>
-
+<div class="box">
+<div class="title">ATM</div>
+<div id="atm">0</div>
 </div>
 
-<div>
-
-Expiry :
-<span id="expiry">-</span>
-
+<div class="box">
+<div class="title">Expiry</div>
+<div id="expiry">-</div>
 </div>
-<div>
 
-PCR :
-
-<span id="pcr">0</span>
+<div class="box">
+<div class="title">PCR</div>
+<div id="pcr">0</div>
+</div>
 
 </div>
 
