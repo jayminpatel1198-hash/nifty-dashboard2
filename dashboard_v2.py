@@ -11,7 +11,7 @@ TOKEN = os.environ.get(
     ""
 ).strip()
 
-INDEX_KEY = "NSE_INDEX|Nifty"
+INDEX_KEY = "NSE_INDEX|Nifty 50"
 
 CHAIN_URL = (
     "https://api.upstox.com/v2/option/chain"
