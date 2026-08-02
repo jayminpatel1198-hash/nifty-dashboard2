@@ -232,14 +232,11 @@ def get_spot():
         }
     )
 
+    quotes = data.get("data", {})
+
     app.logger.info(f"QUOTE RESPONSE = {data}")
     app.logger.info(f"QUOTE KEYS = {list(quotes.keys())}")
     app.logger.info(f"QUOTES = {quotes}")
-
-    quotes = data.get(
-        "data",
-        {}
-    )
 
     if INDEX_KEY in quotes:
         info = quotes[INDEX_KEY]
