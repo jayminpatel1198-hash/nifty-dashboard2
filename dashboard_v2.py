@@ -939,6 +939,10 @@ html+=`
 
 <td><b>${row.strike}</b></td>
 
+
+<td class="put">${Math.round(row.put_total)}</td>
+<td class="put">${Math.round(row.put_total)}</td>
+
 <td>
 ${
 row.call_change > 0 && row.put_change < 0 ? "🔴 CALL WRITING" :
@@ -949,7 +953,7 @@ row.call_change < 0 && row.put_change < 0 ? "🟡 SHORT COVERING" :
 }
 </td>
 
-<td class="put">${Math.round(row.put_total)}</td>
+<td class="put">${Math.round(row.put_change)}</td>
 
 <td class="put">${Math.round(row.put_change)}</td>
 
