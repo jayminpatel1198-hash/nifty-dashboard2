@@ -941,7 +941,14 @@ html+=`
 
 <td class="call">${Math.round(row.call_total)}</td>
 
-<td><b>${row.strike}</b></td>
+<td style="
+background:${row.strike==d.atm ? '#ffd70033' : ''};
+color:${row.strike==d.atm ? 'yellow' : 'white'};
+font-weight:bold;
+font-size:18px;
+">
+${row.strike}
+</td>
 
 
 <td class="put">${Math.round(row.put_total)}</td>
