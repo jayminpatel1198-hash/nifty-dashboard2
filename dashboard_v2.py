@@ -411,25 +411,11 @@ def filter_chain(chain, strikes):
 
         )
 
-        call_chg = num(
+        call_prev = num(call_m.get("prev_oi"))
+        put_prev = num(put_m.get("prev_oi"))
 
-            call_m.get(
-
-                "oi_day_change"
-
-            )
-
-        )
-
-        put_chg = num(
-
-            put_m.get(
-
-                "oi_day_change"
-
-            )
-
-        )
+        call_chg = call_oi - call_prev
+        put_chg = put_oi - put_prev
 
         rows.append(
 
