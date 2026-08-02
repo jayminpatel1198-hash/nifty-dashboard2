@@ -319,97 +319,26 @@ def get_option_chain(expiry):
 def filter_chain(chain, strikes):
 
     wanted = set(strikes)
-
     rows = []
 
     for item in chain:
-        print(item)
 
-        strike = int(
-
-            num(
-
-                item.get(
-
-                    "strike_price"
-
-                )
-
-            )
-
-        )
+        strike = int(num(item.get("strike_price")))
 
         if strike not in wanted:
-
             continue
 
-        call = item.get(
+        call = item.get("call_options", {})
+        put = item.get("put_options", {})
 
-            "call_options",
+        call_m = call.get("market_data", {})
+        put_m = put.get("market_data", {})
 
-            {}
+        call_g = call.get("option_greeks", {})
+        put_g = put.get("option_greeks", {})
 
-        )
-
-        put = item.get(
-
-            "put_options",
-
-            {}
-
-        )
-
-        call_m = call.get(
-
-            "market_data",
-
-            {}
-
-        )
-
-        put_m = put.get(
-
-            "market_data",
-
-            {}
-
-        )
-
-        call_g = call.get(
-
-            "option_greeks",
-
-            {}
-
-        )
-
-        put_g = put.get(
-
-            "option_greeks",
-
-            {}
-
-        )
-
-        call_oi = num(
-
-            call_m.get(
-
-                "oi"
-
-            )
-
-        )
-
-        put_oi = num(
-
-            put_m.get(
-
-                "oi"
-
-            )
-
-        )
+        call_oi = num(call_m.get("oi"))
+        put_oi = num(put_m.get("oi"))
 
         call_prev = num(call_m.get("prev_oi"))
         put_prev = num(put_m.get("prev_oi"))
@@ -417,51 +346,26 @@ def filter_chain(chain, strikes):
         call_chg = call_oi - call_prev
         put_chg = put_oi - put_prev
 
-        rows.append(
+        rows.append({
 
-            {
+            "strike": strike,
 
-                "strike": strike,
+            "call_oi": call_oi,
+            "call_change": call_chg,
+            "call_total": call_oi + call_chg,
 
-                "call_oi": call_oi,
+            "put_oi": put_oi,
+            "put_change": put_chg,
+            "put_total": put_oi + put_chg,
 
-                "call_change": call_chg,
+            "call_iv": num(call_g.get("iv")),
+            "put_iv": num(put_g.get("iv"))
 
-                "call_total": call_oi + call_chg,
+        })
 
-                "put_oi": put_oi,
+    rows.sort(key=lambda x: x["strike"])
 
-                "put_change": put_chg,
-
-                "put_total": put_oi + put_chg,
-
-                "call_iv": num(
-
-                    call_g.get(
-
-                        "iv"
-
-                    )
-
-                ),
-
-                "put_iv": num(
-
-                    put_g.get(
-
-                        "iv"
-
-                    )
-
-                )
-
-            }
-
-        )
-
-        rows.sort(
-            key=lambda x: x["strike"]
-        )
+    if rows:
 
         max_call = max(rows, key=lambda x: x["call_oi"])["strike"]
         max_put = max(rows, key=lambda x: x["put_oi"])["strike"]
@@ -470,7 +374,7 @@ def filter_chain(chain, strikes):
             r["resistance"] = (r["strike"] == max_call)
             r["support"] = (r["strike"] == max_put)
 
-        return rows
+    return rows
 
 
 def calculate_flow(rows):
