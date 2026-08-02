@@ -233,16 +233,20 @@ def get_spot():
     )
 
     app.logger.info(f"QUOTE RESPONSE = {data}")
+    app.logger.info(f"QUOTE KEYS = {list(quotes.keys())}")
+    print(quotes)
 
     quotes = data.get(
         "data",
         {}
     )
 
-    info = quotes.get(
-        INDEX_KEY,
-        {}
-    )
+    if INDEX_KEY in quotes:
+        info = quotes[INDEX_KEY]
+    elif quotes:
+        info = next(iter(quotes.values()))
+    else:
+    info = {}
 
     print(info)
 
@@ -298,6 +302,7 @@ def get_option_chain(expiry):
         {
 
             "instrument_key": INDEX_KEY,
+            app.logger.info(f"CHAIN RESPONSE = {data}")
 
             "expiry_date": expiry
 
