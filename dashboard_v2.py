@@ -234,7 +234,7 @@ def get_spot():
 
     app.logger.info(f"QUOTE RESPONSE = {data}")
     app.logger.info(f"QUOTE KEYS = {list(quotes.keys())}")
-    print(quotes)
+    app.logger.info(f"QUOTES = {quotes}")
 
     quotes = data.get(
         "data",
@@ -246,9 +246,9 @@ def get_spot():
     elif quotes:
         info = next(iter(quotes.values()))
     else:
-    info = {}
+        info = {}
 
-    print(info)
+    app.logger.info(f"INFO = {info}")
 
     ltp = num(info.get("last_price"))
 
