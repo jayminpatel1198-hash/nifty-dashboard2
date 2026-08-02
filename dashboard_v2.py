@@ -875,17 +875,12 @@ Loading...
 <tr>
 
 <th>CALL OI</th>
-
 <th>CALL ΔOI</th>
-
 <th>CALL TOTAL</th>
-
 <th>STRIKE</th>
-
 <th>PUT TOTAL</th>
-
+<th>SIGNAL</th>
 <th>PUT ΔOI</th>
-
 <th>PUT OI</th>
 
 </tr>
@@ -941,19 +936,16 @@ html+=`
 
 
 <td class="put">${Math.round(row.put_total)}</td>
-<td class="put">${Math.round(row.put_total)}</td>
 
-<td>
+<td class="signal">
 ${
 row.call_change > 0 && row.put_change < 0 ? "🔴 CALL WRITING" :
 row.put_change > 0 && row.call_change < 0 ? "🟢 PUT WRITING" :
 row.call_change > 0 && row.put_change > 0 ? "⚡ LONG BUILDUP" :
 row.call_change < 0 && row.put_change < 0 ? "🟡 SHORT COVERING" :
-"-"
+"➖ NEUTRAL"
 }
 </td>
-
-<td class="put">${Math.round(row.put_change)}</td>
 
 <td class="put">${Math.round(row.put_change)}</td>
 
