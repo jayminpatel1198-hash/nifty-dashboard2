@@ -472,7 +472,7 @@ for r in rows:
 
 return rows
 
-    return rows
+
 def calculate_flow(rows):
 
     call_oi = 0
