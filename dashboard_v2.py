@@ -928,7 +928,7 @@ html+=`
 
 <td class="call">
 <div style="display:flex;align-items:center;gap:5px;">
-<div style="height:10px;background:red;width:${Math.min(row.call_oi/150000,200)}px;border-radius:5px;"></div>
+<div style="height:10px;background:red;width:${Math.min(row.call_oi/50000,250)}px;border-radius:5px;"></div>
 <span>${Math.round(row.call_oi)}</span>
 </div>
 </td>
@@ -939,13 +939,23 @@ html+=`
 
 <td><b>${row.strike}</b></td>
 
+<td>
+${
+row.call_change > 0 && row.put_change < 0 ? "🔴 CALL WRITING" :
+row.put_change > 0 && row.call_change < 0 ? "🟢 PUT WRITING" :
+row.call_change > 0 && row.put_change > 0 ? "⚡ LONG BUILDUP" :
+row.call_change < 0 && row.put_change < 0 ? "🟡 SHORT COVERING" :
+"-"
+}
+</td>
+
 <td class="put">${Math.round(row.put_total)}</td>
 
 <td class="put">${Math.round(row.put_change)}</td>
 
 <td class="put">
 <div style="display:flex;align-items:center;gap:5px;">
-<div style="height:10px;background:limegreen;width:${Math.min(row.put_oi/150000,200)}px;border-radius:5px;"></div>
+<div style="height:10px;background:limegreen;width:${Math.min(row.put_oi/50000,250)}px;border-radius:5px;"></div>
 <span>${Math.round(row.put_oi)}</span>
 </div>
 </td>
