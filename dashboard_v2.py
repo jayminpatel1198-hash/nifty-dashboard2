@@ -390,6 +390,8 @@ def calculate_flow(rows):
     call_total = 0
 
     put_total = 0
+    max_call = max(rows, key=lambda x: x["call_oi"])["strike"]
+    max_put = max(rows, key=lambda x: x["put_oi"])["strike"]
 
     for row in rows:
 
