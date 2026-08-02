@@ -323,6 +323,7 @@ def filter_chain(chain, strikes):
     rows = []
 
     for item in chain:
+        print(item)
 
         strike = int(
 
