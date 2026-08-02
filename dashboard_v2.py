@@ -580,15 +580,47 @@ HTML = """
 <style>
 
 body{
+    background:#111;
+    color:white;
+    font-family:Arial,sans-serif;
+    margin:10px;
+    padding:0;
+    font-size:18px;
+}
 
-background:#111;
+h1{
+    text-align:center;
+    font-size:42px;
+    margin-bottom:20px;
+}
 
-color:white;
+h2{
+    text-align:center;
+    font-size:32px;
+}
 
-font-family:Arial;
+h3{
+    font-size:28px;
+    margin-top:25px;
+    margin-bottom:10px;
+}
 
-margin:20px;
+.top{
+    display:flex;
+    justify-content:center;
+    gap:15px;
+    flex-wrap:wrap;
+    margin-bottom:20px;
+}
 
+.top div{
+    background:#2b2b2b;
+    padding:15px;
+    border-radius:12px;
+    min-width:180px;
+    text-align:center;
+    font-size:24px;
+    font-weight:bold;
 }
 
 h1{
@@ -637,33 +669,24 @@ text-align:center;
 }
 
 table{
-
-width:100%;
-
-border-collapse:collapse;
-
-margin-top:20px;
-
+    width:100%;
+    border-collapse:collapse;
+    margin-top:20px;
+    font-size:18px;
 }
 
 th{
-
-background:#222;
-
-padding:10px;
-
-border:1px solid #444;
-
+    background:#222;
+    padding:14px;
+    border:1px solid #444;
+    font-size:18px;
 }
 
 td{
-
-padding:8px;
-
-border:1px solid #333;
-
-text-align:center;
-
+    padding:12px;
+    border:1px solid #333;
+    text-align:center;
+    font-size:18px;
 }
 
 .call{
