@@ -483,6 +483,10 @@ def calculate_flow(rows):
         "trend_score": round((put_percent - call_percent), 1),
         "option_score": round((put_percent / 10), 1),
         "max_pain": max_pain,
+        "s1": max_put,
+        "s2": sorted(rows, key=lambda x:x["put_total"], reverse=True)[1]["strike"],
+        "r1": max_call,
+        "r2": sorted(rows, key=lambda x:x["call_total"], reverse=True)[1]["strike"],
 
     }
 
@@ -842,6 +846,25 @@ font-weight:bold;
 <div class="box">
 <div class="title">MAX PAIN</div>
 <div id="maxpain">0</div>
+<div class="box">
+<div class="title">S1</div>
+<div id="s1">0</div>
+</div>
+
+<div class="box">
+<div class="title">S2</div>
+<div id="s2">0</div>
+</div>
+
+<div class="box">
+<div class="title">R1</div>
+<div id="r1">0</div>
+</div>
+
+<div class="box">
+<div class="title">R2</div>
+<div id="r2">0</div>
+</div>
 </div>
 
 </div>
@@ -927,6 +950,10 @@ document.getElementById("atm").innerHTML=d.atm;
 document.getElementById("expiry").innerHTML=d.expiry;
 document.getElementById("pcr").innerHTML=d.flow.pcr;
 document.getElementById("maxpain").innerHTML=d.flow.max_pain;
+document.getElementById("s1").innerHTML=d.flow.s1;
+document.getElementById("s2").innerHTML=d.flow.s2;
+document.getElementById("r1").innerHTML=d.flow.r1;
+document.getElementById("r2").innerHTML=d.flow.r2;
 
 document.getElementById("flow").innerHTML=d.flow.overall_flow;
 
