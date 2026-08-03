@@ -427,21 +427,21 @@ strong_support = (
 
 battle_zone = max_pain
     
-    for row in rows:
+for row in rows:
 
-        call_oi += row["call_oi"]
+    call_oi += row["call_oi"]
 
-        put_oi += row["put_oi"]
+    put_oi += row["put_oi"]
 
-        call_change += row["call_change"]
+    call_change += row["call_change"]
 
-        put_change += row["put_change"]
+    put_change += row["put_change"]
 
-        call_total += row["call_total"]
+    call_total += row["call_total"]
 
-        put_total += row["put_total"]
+    put_total += row["put_total"]
 
-    total_flow = abs(call_change) + abs(put_change)
+total_flow = abs(call_change) + abs(put_change)
 
     if total_flow == 0:
 
