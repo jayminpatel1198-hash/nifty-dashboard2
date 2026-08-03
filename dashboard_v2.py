@@ -482,8 +482,22 @@ def calculate_flow(rows):
         "max_put": max_put,
         "trend_score": round((put_percent - call_percent), 1),
         "option_score": round((put_percent / 10), 1),
-        "signal": "BUY CALL" if overall=="PUT BUYING" else "BUY PUT",
+        "signal":
+        (
+        "BUY CALL"
+        if overall=="PUT BUYING" and put_percent>60
+        else
+        "BUY PUT"
+        if overall=="CALL WRITING" and call_percent>60
+        else
+        "WAIT"
+        ),
         "confidence": round(abs(put_percent-call_percent),1),
+        "entry":
+        "YES" if abs(put_percent-call_percent)>20 else "NO",
+
+        "exit":
+        "YES" if abs(put_percent-call_percent)<8 else "NO",
         "call_strength": round(call_percent,1),
         "put_strength": round(put_percent,1),
         "max_pain": max_pain,
@@ -881,6 +895,15 @@ font-weight:bold;
 <div class="box">
 <div class="title">SIGNAL</div>
 <div id="signal">-</div>
+<div class="box">
+<div class="title">ENTRY</div>
+<div id="entry">-</div>
+</div>
+
+<div class="box">
+<div class="title">EXIT</div>
+<div id="exit">-</div>
+</div>
 </div>
 </div>
 </div>
@@ -975,6 +998,8 @@ document.getElementById("r2").innerHTML=d.flow.r2;
 document.getElementById("trend").innerHTML = d.flow.overall_flow;
 document.getElementById("confidence").innerHTML = d.flow.confidence + "%";
 document.getElementById("signal").innerHTML = d.flow.signal;
+document.getElementById("entry").innerHTML=d.flow.entry;
+document.getElementById("exit").innerHTML=d.flow.exit;
 
 document.getElementById("flow").innerHTML=d.flow.overall_flow;
 
