@@ -393,6 +393,39 @@ def calculate_flow(rows):
     max_call = max(rows, key=lambda x: x["call_oi"])["strike"]
     max_put = max(rows, key=lambda x: x["put_oi"])["strike"]
     max_pain = min(rows, key=lambda x: abs(x["call_total"] - x["put_total"]))["strike"]
+    # -----------------------------
+# AI SUPPORT / RESISTANCE ENGINE
+# -----------------------------
+
+call_sorted = sorted(
+    rows,
+    key=lambda x: x["call_total"],
+    reverse=True
+)
+
+put_sorted = sorted(
+    rows,
+    key=lambda x: x["put_total"],
+    reverse=True
+)
+
+major_resistance = call_sorted[0]["strike"]
+
+strong_resistance = (
+    call_sorted[1]["strike"]
+    if len(call_sorted) > 1
+    else major_resistance
+)
+
+major_support = put_sorted[0]["strike"]
+
+strong_support = (
+    put_sorted[1]["strike"]
+    if len(put_sorted) > 1
+    else major_support
+)
+
+battle_zone = max_pain
     
     for row in rows:
 
@@ -505,6 +538,15 @@ def calculate_flow(rows):
         "s2": sorted(rows, key=lambda x:x["put_total"], reverse=True)[1]["strike"],
         "r1": max_call,
         "r2": sorted(rows, key=lambda x:x["call_total"], reverse=True)[1]["strike"],
+        "major_support": major_support,
+
+        "strong_support": strong_support,
+
+        "major_resistance": major_resistance,
+
+        "strong_resistance": strong_resistance,
+
+        "battle_zone": battle_zone,
 
     }
 
