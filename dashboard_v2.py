@@ -392,7 +392,8 @@ def calculate_flow(rows):
     put_total = 0
     max_call = max(rows, key=lambda x: x["call_oi"])["strike"]
     max_put = max(rows, key=lambda x: x["put_oi"])["strike"]
-
+    max_pain = min(rows, key=lambda x: abs(x["call_total"] - x["put_total"]))["strike"]
+    
     for row in rows:
 
         call_oi += row["call_oi"]
@@ -481,6 +482,7 @@ def calculate_flow(rows):
         "max_put": max_put,
         "trend_score": round((put_percent - call_percent), 1),
         "option_score": round((put_percent / 10), 1),
+        "max_pain": max_pain,
 
     }
 
@@ -837,6 +839,10 @@ font-weight:bold;
 <div class="title">PCR</div>
 <div id="pcr">0</div>
 </div>
+<div class="box">
+<div class="title">MAX PAIN</div>
+<div id="maxpain">0</div>
+</div>
 
 </div>
 
@@ -920,6 +926,7 @@ document.getElementById("atm").innerHTML=d.atm;
 
 document.getElementById("expiry").innerHTML=d.expiry;
 document.getElementById("pcr").innerHTML=d.flow.pcr;
+document.getElementById("maxpain").innerHTML=d.flow.max_pain;
 
 document.getElementById("flow").innerHTML=d.flow.overall_flow;
 
