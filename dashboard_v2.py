@@ -443,41 +443,37 @@ for row in rows:
 
 total_flow = abs(call_change) + abs(put_change)
 
-    if total_flow == 0:
+if total_flow == 0:
 
-        call_percent = 50.0
+    call_percent = 50.0
 
-        put_percent = 50.0
+    put_percent = 50.0
 
-    else:
+else:
 
-        call_percent = (
+    call_percent = (
 
-            abs(call_change)
+        abs(call_change) / total_flow
 
-            / total_flow
+    ) * 100
 
-        ) * 100
+    put_percent = (
 
-        put_percent = (
+        abs(put_change) / total_flow
 
-            abs(put_change)
+    ) * 100
 
-            / total_flow
+if put_change > call_change:
 
-        ) * 100
+    overall = "PUT BUYING"
 
-    if put_change > call_change:
+elif call_change > put_change:
 
-        overall = "PUT BUYING"
+    overall = "CALL WRITING"
 
-    elif call_change > put_change:
+else:
 
-        overall = "CALL WRITING"
-
-    else:
-
-        overall = "NEUTRAL"
+    overall = "NEUTRAL"
 
     return {
 
